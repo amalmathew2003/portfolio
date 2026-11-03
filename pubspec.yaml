@@ -1,0 +1,25 @@
+name: amal_portfolio
+description: Amal Mathew — Flutter Developer portfolio (Flutter port of the React/Vite portfolio).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.2.1
+  lucide_icons_flutter: ^4.0.1
+  visibility_detector: ^0.4.0+2
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
