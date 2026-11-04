@@ -16,8 +16,8 @@ const credentials = <Credential>[
   Credential(
     id: 1,
     title: 'Bachelor of Computer Applications (BCA)',
-    subtitle: 'Computer Science Fundamentals · Degree',
-    year: '2023',
+    subtitle: 'Mahatma Gandhi University · Degree (2021–2024)',
+    year: '2024',
   ),
   Credential(
     id: 2,
@@ -27,26 +27,26 @@ const credentials = <Credential>[
   ),
   Credential(
     id: 3,
-    title: 'Mobile Application Security & Architecture',
-    subtitle: 'Avanzo Cyber Security Solutions · Engineering',
+    title: 'Reactive State Management Architecture',
+    subtitle: 'BLoC, Provider & Riverpod · Design Patterns',
     year: '2024',
   ),
   Credential(
     id: 4,
-    title: 'Reactive State Management (BLoC & Provider)',
-    subtitle: 'Enterprise Architecture & Design Patterns',
-    year: '2023',
+    title: 'Firebase & Cloud Firestore Integration',
+    subtitle: 'Auth, Firestore, Cloud Sync & Storage',
+    year: '2024',
   ),
   Credential(
     id: 5,
-    title: 'Firebase & Cloud Firestore Integration',
-    subtitle: 'Real-Time Sync, Auth & Mobile Backend',
-    year: '2023',
+    title: 'REST API & Dio Interceptors Pipeline',
+    subtitle: 'Dio, JWT Token Rotation & Offline Cache',
+    year: '2025',
   ),
   Credential(
     id: 6,
-    title: 'REST API & Dio Interceptors Pipeline',
-    subtitle: 'JWT Rotation, Offline Cache & Resilient Networking',
-    year: '2024',
+    title: 'Mobile Application Security & Engineering',
+    subtitle: 'Avanzo Cyber Solutions · Engineering',
+    year: '2025',
   ),
 ];

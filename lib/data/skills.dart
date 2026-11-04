@@ -11,10 +11,10 @@ class MarqueeItem {
 }
 
 const skillCategories = <SkillCategory>[
-  SkillCategory('Flutter', ['Flutter', 'Dart']),
-  SkillCategory('State Management', ['Provider', 'BLoC', 'GetX']),
-  SkillCategory('Backend Integration', ['Dio', 'REST APIs', 'Firebase Auth', 'Cloud Firestore', 'WebSockets']),
-  SkillCategory('Tools & Architecture', ['Git / GitHub', 'Clean Architecture']),
+  SkillCategory('Flutter', ['Flutter', 'Dart', 'OOP']),
+  SkillCategory('State Management', ['BLoC', 'Provider', 'GetX', 'Riverpod']),
+  SkillCategory('Backend & Data', ['Firebase', 'Firestore', 'REST APIs (Dio)', 'Hive', 'Sqflite', 'Supabase']),
+  SkillCategory('Tools & Other', ['Git / GitHub', 'Razorpay', 'UI/UX Implementation', 'Clean Architecture']),
 ];
 
 const marqueeItems = <MarqueeItem>[

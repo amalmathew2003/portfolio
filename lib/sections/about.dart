@@ -89,7 +89,7 @@ class AboutSection extends StatelessWidget {
                 ),
                 Text('BACHELOR OF COMPUTER APPLICATIONS (BCA)', style: anton(18, ls: 0.025)),
                 const SizedBox(height: 4),
-                Text('Kerala, India · Computer Science Fundamentals', style: mono(12, color: const Color(0xFF777777))),
+                Text('Mahatma Gandhi University · 2021 — 2024 · Angamaly, Kerala', style: mono(12, color: const Color(0xFF777777))),
               ],
             ),
           ),

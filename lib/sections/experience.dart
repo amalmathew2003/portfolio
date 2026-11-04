@@ -164,7 +164,7 @@ class _Card extends StatelessWidget {
                 ),
               ),
               Text(
-                isCurrent ? '~1.3 YEARS TENURE' : 'COMPLETED',
+                isCurrent ? '1.7+ YEARS EXP' : 'COMPLETED',
                 style: mono(10, color: const Color(0xFF777777), ls: 0.05),
               ),
             ],
