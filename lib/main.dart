@@ -3,6 +3,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'app.dart';
 import 'core/theme.dart';
+import 'dragon_skeleton_only.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,7 @@ class AmalPortfolio extends StatelessWidget {
           thumbVisibility: const WidgetStatePropertyAll(true),
         ),
       ),
+      builder: (context, child) => DragonSkeletonCursor(child: child!),
       home: const AppShell(),
     );
   }

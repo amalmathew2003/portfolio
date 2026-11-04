@@ -37,10 +37,10 @@ const projects = <Project>[
     title: 'Voice Notes',
     subtitle: 'Smart Audio & Note Management',
     description:
-        'A Flutter-Firebase mobile application designed to capture ideas, reminders, and personal notes instantly through one-tap audio recording, organized with timestamps and offline playback.',
+        'A Flutter mobile app using Hive for local storage and Groq AI for speech-to-text and AI text generation, enabling one-tap voice note creation and offline access.',
     longDescription:
-        'The Smart Voice Note App provides users with a simple, reliable, and efficient way to record, store, and manage voice notes. Features one-tap high-quality audio recording, automatic organization with date and time labels, interactive audio playback controls, and offline-first storage with Firebase synchronization.',
-    tags: ['Flutter', 'Dart', 'Firebase', 'Audio', 'UI/UX'],
+        'Built with Flutter, Hive for offline-first local storage, and Groq AI for speech-to-text and AI-powered text generation. Enables users to create voice notes from keywords with real-time transcription, organized playback, and cloud sync.',
+    tags: ['Flutter', 'Dart', 'Hive', 'Groq AI', 'Firebase'],
     categories: ['Flutter', 'Firebase', 'AI'],
     image: 'assets/images/vn1full.png',
     github: 'https://github.com/amalmathew2003/note-app',

@@ -38075,7 +38075,7 @@ $S:59}
 A.IS.prototype={
 G(a){var s=this,r=null,q=s.c,p=q.a===1,o=p?A.ae(B.l,0.1):A.ae(B.e,0.06),n=A.bQ(p?A.ae(B.l,0.2):A.ae(B.e,0.12),1),m=p?"CURRENT ROLE":q.f
 o=A.aw(r,A.a3(m,r,r,r,A.aH(10,!1,p?B.l:B.I,r,0.1),r),B.j,r,r,new A.ac(o,r,n,r,r,r,B.q),r,r,r,r,B.hK,r,r,r)
-n=p?"~1.3 YEARS TENURE":"COMPLETED"
+n=p?"1.7+ YEARS EXP":"COMPLETED"
 m=t.p
 n=A.Ia(B.bh,A.c([o,A.a3(n,r,r,r,A.aH(10,!1,B.bq,r,0.05),r)],m),B.fY,4,8)
 return A.fO(new A.bJ(new A.a6c(s,A.as(A.c([new A.av(B.hI,n,r),A.a3(q.b.toUpperCase(),r,r,r,A.bt(s.e?36:30,B.e,r,0.05),r),new A.av(B.lw,A.aR(A.c([B.Da,B.aa,new A.cd(1,B.a8,A.a3(q.c,r,r,r,A.aH(14,!1,B.e,r,0),r),r)],m),B.u,B.k,B.L,r),r)],m),B.y,B.k,B.n),A.as(A.c([A.aR(A.c([B.D2,B.aa,A.a3(q.d,r,r,r,A.aH(12,!1,B.I,r,0),r)],m),B.u,B.k,B.L,r),B.eb,A.aR(A.c([B.lN,B.aa,A.a3(q.e,r,r,r,A.aH(12,!1,B.I,r,0),r)],m),B.u,B.k,B.L,r)],m),B.y,B.k,B.L)),r,r,B.E,!0,r),B.ak,A.cu(0,s.f,0),B.aY,25,0,1,s.d,!1)}}
@@ -38194,7 +38194,7 @@ n=t.p
 m=A.fO(new A.av(B.bt,A.aR(A.c([B.L9,B.aa,A.a3("FLUTTER DEVELOPER",i,i,i,A.aH(12,!0,B.l,i,0.25),i),B.aa,A.a3("/",i,i,i,A.aH(12,!1,A.ae(B.e,0.2),i,0),i),B.aa,new A.cd(1,B.a8,A.a3("KERALA, INDIA",i,i,i,A.aH(11,!1,B.I,i,0.05),i),i)],n),B.u,B.k,B.L,i),i),B.ak,B.ln,B.bR,-20,0,1,r,!1)
 l=A.afy(A.a3("I BUILD MOBILE",i,i,i,A.bt(h,B.e,0.88,-0.025),i),B.Y,B.lq,r)
 k=A.afy(A.a3("EXPERIENCES THAT MATTER.",i,i,i,A.bt(h,B.l,0.88,-0.025),i),B.bQ,B.lq,r)
-return A.as(A.c([p,new A.av(B.aN,o,i),m,new A.av(B.cI,l,i),new A.av(B.bt,k,i),A.fO(new A.av(B.cH,new A.dr(B.y8,A.a3("Flutter developer with ~1.3 years of professional experience crafting cross-platform mobile applications. Specialized in clean architecture, state management, and seamless REST & Firebase integrations.",i,i,i,A.lx(q?16:14,B.I,1.625),i),i),i),B.ak,B.BM,B.aY,0,20,1,r,!1),A.fO(A.Ia(B.bh,A.c([new A.bJ(new A.a8h(),B.ag,new A.a8i(),B.E,!0,i),new A.bJ(new A.a8j(),B.ag,new A.a8k(),B.E,!0,i)],n),B.fY,16,16),B.ak,B.aY,B.aY,0,20,1,r,!1)],n),B.y,B.fl,B.n)}}
+return A.as(A.c([p,new A.av(B.aN,o,i),m,new A.av(B.cI,l,i),new A.av(B.bt,k,i),A.fO(new A.av(B.cH,new A.dr(B.y8,A.a3("Flutter developer with 1.7+ years of professional experience crafting cross-platform mobile applications. Specialized in clean architecture, state management, and seamless REST & Firebase integrations.",i,i,i,A.lx(q?16:14,B.I,1.625),i),i),i),B.ak,B.BM,B.aY,0,20,1,r,!1),A.fO(A.Ia(B.bh,A.c([new A.bJ(new A.a8h(),B.ag,new A.a8i(),B.E,!0,i),new A.bJ(new A.a8j(),B.ag,new A.a8k(),B.E,!0,i)],n),B.fY,16,16),B.ak,B.aY,B.aY,0,20,1,r,!1)],n),B.y,B.fl,B.n)}}
 A.a8i.prototype={
 $0(){return $.be().iH("work")},
 $S:0}
@@ -38219,7 +38219,7 @@ s=A.ae(B.af,0.6)
 r=n.c
 q=r?B.m:new A.b6(A.ae(B.e,0.08),1,B.A,-1)
 p=r?new A.b6(A.ae(B.e,0.08),1,B.A,-1):B.m
-o=A.hQ(A.ahM(A.aw(m,new A.Eu(A.as(A.c([n.xD("1.3 YRS","PROFESSIONAL EXP",B.l,k,400),B.b5,n.F3(),B.b5,n.xD("3 APPS","FEATURED PRODUCTION BUILDS",B.e,k,550),B.b5,n.F3(),B.b5,n.xD("FLUTTER","CORE ARCHITECTURE",B.l,j,700)],t.p),B.ac,B.k,B.n),m),B.j,m,m,new A.ac(s,m,new A.ba(B.m,p,B.m,q),m,m,m,B.q),m,m,m,m,B.hM,m,m,m),l),B.C,m)
+o=A.hQ(A.ahM(A.aw(m,new A.Eu(A.as(A.c([n.xD("1.7+ YRS","PROFESSIONAL EXP",B.l,k,400),B.b5,n.F3(),B.b5,n.xD("3 APPS","FEATURED BUILDS",B.e,k,550),B.b5,n.F3(),B.b5,n.xD("FLUTTER","CORE ARCHITECTURE",B.l,j,700)],t.p),B.ac,B.k,B.n),m),B.j,m,m,new A.ac(s,m,new A.ba(B.m,p,B.m,q),m,m,m,B.q),m,m,m,m,B.hM,m,m,m),l),B.C,m)
 return new A.fZ(r?B.c3:B.bi,m,m,o,m)}}
 A.abt.prototype={
 $2(a,b){var s=this,r=null,q=s.a.c?B.c9:B.y,p=b?1.05:1

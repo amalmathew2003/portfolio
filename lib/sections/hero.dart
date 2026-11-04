@@ -380,7 +380,7 @@ class _LeftColumn extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 576),
               child: Text(
-                'Flutter developer with ~1.3 years of professional experience crafting cross-platform mobile applications. Specialized in clean architecture, state management, and seamless REST & Firebase integrations.',
+                'Flutter developer with 1.7+ years of professional experience crafting cross-platform mobile applications. Specialized in clean architecture, state management, and seamless REST & Firebase integrations.',
                 style: inter(md ? 16 : 14, color: C.muted, h: 1.625),
               ),
             ),
@@ -505,11 +505,11 @@ class _StatsColumn extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _stat('1.3 YRS', 'PROFESSIONAL EXP', C.accent, big, 400),
+                _stat('1.7+ YRS', 'PROFESSIONAL EXP', C.accent, big, 400),
                 const SizedBox(height: 24),
                 _divider(),
                 const SizedBox(height: 24),
-                _stat('3 APPS', 'FEATURED PRODUCTION BUILDS', Colors.white, big, 550),
+                _stat('3 APPS', 'FEATURED BUILDS', Colors.white, big, 550),
                 const SizedBox(height: 24),
                 _divider(),
                 const SizedBox(height: 24),

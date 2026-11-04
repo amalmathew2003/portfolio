@@ -41,7 +41,7 @@ class _SpringCurve extends Curve {
   double transformInternal(double t) => t >= 1 ? 1.0 : _sim.x(t * 0.5);
 }
 
-/// Logo — `AMAL •`
+/// Logo — `AMAL MATHEW •`
 class Logo extends StatelessWidget {
   const Logo({super.key, required this.onTap});
   final VoidCallback onTap;
@@ -54,7 +54,7 @@ class Logo extends StatelessWidget {
       builder: (context, h) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ATxt('AMAL', anton(24, color: h ? C.accent : Colors.white, ls: 0.05)),
+          ATxt('AMAL MATHEW', anton(24, color: h ? C.accent : Colors.white, ls: 0.05)),
           const SizedBox(width: 4),
           AScale(
             scale: h ? 1.25 : 1,
