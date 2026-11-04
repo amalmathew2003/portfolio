@@ -25,15 +25,19 @@ class DragonSkeletonCursor extends StatefulWidget {
   final Color glowColor;
   final bool showEmbers;
 
+  /// Real blur glow looks nicer but is heavy. Keep false for smooth speed.
+  final bool softGlow;
+
   const DragonSkeletonCursor({
     super.key,
     required this.child,
-    this.segments = 38,
-    this.spacing = 13,
+    this.segments = 32,
+    this.spacing = 14,
     this.scale = 0.75,
     this.boneColor = const Color(0xFFEFE8D6),
     this.glowColor = const Color(0xFFFF5A1F),
     this.showEmbers = true,
+    this.softGlow = false,
   });
 
   @override
@@ -61,6 +65,7 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
   double _time = 0;
   double _phase = 0; // walking cycle, grows as the dragon moves
   double _speed = 0; // smoothed head speed
+  Size _cachedSize = const Size(800, 600); // cached so MediaQuery isn't hit every tick
 
   @override
   void initState() {
@@ -72,6 +77,13 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
     _ticker = createTicker(_onTick)..start();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Cache the screen size; updated on MediaQuery changes (resize, orientation, etc.)
+    _cachedSize = MediaQuery.sizeOf(context) / widget.scale;
+  }
+
   Offset _jitter(double r) => Offset(
         (_rng.nextDouble() - 0.5) * 2 * r,
         (_rng.nextDouble() - 0.5) * 2 * r,
@@ -81,7 +93,8 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
     _time = elapsed.inMicroseconds / 1e6;
 
     if (!_hasPointer) {
-      final size = MediaQuery.of(context).size / widget.scale;
+      // Use cached size (updated in didChangeDependencies) — avoids MediaQuery on every tick
+      final size = _cachedSize;
       _target = Offset(
         size.width / 2 + math.cos(_time * 0.8) * size.width * 0.3,
         size.height / 2 + math.sin(_time * 1.2) * size.height * 0.25,
@@ -152,8 +165,8 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
       e.life -= 0.022;
     }
     _embers.removeWhere((e) => e.life <= 0);
-    if (_embers.length > 180) {
-      _embers.removeRange(0, _embers.length - 180);
+    if (_embers.length > 80) {
+      _embers.removeRange(0, _embers.length - 80);
     }
   }
 
@@ -193,6 +206,7 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
                     scale: widget.scale,
                     bone: widget.boneColor,
                     glow: widget.glowColor,
+                    softGlow: widget.softGlow,
                   ),
                 ),
               ),
@@ -213,6 +227,7 @@ class _DragonPainter extends CustomPainter {
   final double scale;
   final Color bone;
   final Color glow;
+  final bool softGlow;
 
   _DragonPainter({
     required this.points,
@@ -223,6 +238,7 @@ class _DragonPainter extends CustomPainter {
     required this.scale,
     required this.bone,
     required this.glow,
+    required this.softGlow,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -235,9 +251,11 @@ class _DragonPainter extends CustomPainter {
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
 
-  Paint _blur(Color c, double sigma) => Paint()
-    ..color = c
-    ..maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
+  Paint _blur(Color c, double sigma) {
+    final p = Paint()..color = c;
+    if (softGlow) p.maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
+    return p;
+  }
 
   double _heading(int i) {
     if (i == 0) {
@@ -279,7 +297,10 @@ class _DragonPainter extends CustomPainter {
 
   // ---------------------------------------------------------------- embers
   void _drawEmbers(Canvas canvas) {
-    final p = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+    final p = Paint();
+    if (softGlow) {
+      p.maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+    }
     for (final e in embers) {
       final life = e.life.clamp(0.0, 1.0).toDouble();
       final c = Color.lerp(const Color(0xFFFFD27A), glow, 1 - life)!;
@@ -302,7 +323,8 @@ class _DragonPainter extends CustomPainter {
         ..strokeWidth = 7
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        ..maskFilter =
+            softGlow ? const MaskFilter.blur(BlurStyle.normal, 6) : null,
     );
     canvas.drawPath(spine, _stroke(boneDark, 2));
   }
@@ -445,7 +467,8 @@ class _DragonPainter extends CustomPainter {
         ..color = glow.withAlpha(110)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+        ..maskFilter =
+            softGlow ? const MaskFilter.blur(BlurStyle.normal, 4) : null,
     );
     canvas.drawPath(membrane, _stroke(bone.withAlpha(110), 1));
 
@@ -532,12 +555,14 @@ class _DragonPainter extends CustomPainter {
     canvas.translate(head.dx, head.dy);
     canvas.rotate(a);
 
-    // soft glow under the head
-    canvas.drawCircle(
-      const Offset(10, 0),
-      26,
-      _blur(glow.withAlpha(40), 14),
-    );
+    // soft glow under the head (only with real blur)
+    if (softGlow) {
+      canvas.drawCircle(
+        const Offset(10, 0),
+        26,
+        _blur(glow.withAlpha(40), 14),
+      );
+    }
 
     // whiskers
     final whisker = _stroke(bone.withAlpha(200), 1.2);

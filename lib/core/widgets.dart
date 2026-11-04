@@ -288,7 +288,8 @@ class _LoopAnimState extends State<LoopAnim> with SingleTickerProviderStateMixin
       AnimatedBuilder(animation: _c, builder: (context, _) => widget.builder(context, _c.value));
 }
 
-/// Tailwind `animate-ping`
+/// Tailwind `animate-ping` — optimised with RepaintBoundary so the ring
+/// doesn't dirty the parent layer on every frame.
 class Ping extends StatelessWidget {
   const Ping({super.key, required this.size, required this.color});
   final double size;
@@ -297,22 +298,24 @@ class Ping extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const curve = Cubic(0, 0, 0.2, 1);
-    return LoopAnim(
-      duration: const Duration(seconds: 1),
-      builder: (context, t) {
-        final e = curve.transform(math.min(t / 0.75, 1.0));
-        return Opacity(
-          opacity: 1 - e,
-          child: Transform.scale(
-            scale: 1 + e,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    return RepaintBoundary(
+      child: LoopAnim(
+        duration: const Duration(milliseconds: 1200),
+        builder: (context, t) {
+          final e = curve.transform(math.min(t / 0.75, 1.0));
+          return Opacity(
+            opacity: 1 - e,
+            child: Transform.scale(
+              scale: 1 + e,
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -628,6 +631,7 @@ class Sticky extends StatefulWidget {
 
 class _StickyState extends State<Sticky> {
   final GlobalKey _childKey = GlobalKey();
+  double _last = -1;
 
   double _dy() {
     final area = widget.areaKey.currentContext?.findRenderObject();
@@ -643,7 +647,15 @@ class _StickyState extends State<Sticky> {
     return AnimatedBuilder(
       animation: app.scroll,
       child: KeyedSubtree(key: _childKey, child: widget.child),
-      builder: (context, child) => Transform.translate(offset: Offset(0, _dy()), child: child),
+      builder: (context, child) {
+        final dy = _dy();
+        // Skip transform if position hasn't changed (avoids compositing layer dirty)
+        if ((dy - _last).abs() < 0.5) {
+          return Transform.translate(offset: Offset(0, _last), child: child);
+        }
+        _last = dy;
+        return Transform.translate(offset: Offset(0, dy), child: child);
+      },
     );
   }
 }

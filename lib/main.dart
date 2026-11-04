@@ -7,8 +7,8 @@ import 'dragon_skeleton_only.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // react quickly to scroll-in-view triggers
-  VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 50);
+  // Reduce scroll-in-view detector frequency for smoother frame budget
+  VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 100);
   runApp(const AmalPortfolio());
 }
 

@@ -1,1 +1,0 @@
- C:\\d\\d\\projects\\amal_portfolio_flutter\\amal_portfolio\\build\\web\\favicon.svg:  C:\\d\\d\\projects\\amal_portfolio_flutter\\amal_portfolio\\web\\favicon.svg C:\\d\\d\\projects\\amal_portfolio_flutter\\amal_portfolio\\web\\index.html
