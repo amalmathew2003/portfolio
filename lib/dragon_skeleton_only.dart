@@ -3,18 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// What the dragon does when the mouse is NOT near it.
-enum DragonRoam {
-  /// Flies freely across the whole screen (and across all pages).
-  fullScreen,
-
-  /// Wanders only around the spot where it is now.
-  nearby,
-
-  /// Stays still until the mouse comes near.
-  off,
-}
-
 /// Wrap any page with this widget and a glowing dragon skeleton follows the mouse.
 ///
 /// Usage:
@@ -40,23 +28,6 @@ class DragonSkeletonCursor extends StatefulWidget {
   /// Real blur glow looks nicer but is heavy. Keep false for smooth speed.
   final bool softGlow;
 
-  /// The dragon follows the mouse only when the mouse is closer than this
-  /// (in screen pixels). Use double.infinity to always follow.
-  final double followRadius;
-
-  /// The dragon lets go of the mouse after it stops moving for this many
-  /// seconds. Use double.infinity to never let go.
-  final double followHoldSeconds;
-
-  /// What the dragon does when the mouse is not near.
-  final DragonRoam roam;
-
-  /// For DragonRoam.nearby: how far it wanders from its spot (screen pixels).
-  final double nearbyRadius;
-
-  /// Flying speed while roaming (higher = faster).
-  final double roamSpeed;
-
   const DragonSkeletonCursor({
     super.key,
     required this.child,
@@ -67,11 +38,6 @@ class DragonSkeletonCursor extends StatefulWidget {
     this.glowColor = const Color(0xFFFF5A1F),
     this.showEmbers = true,
     this.softGlow = false,
-    this.followRadius = 240,
-    this.followHoldSeconds = 3,
-    this.roam = DragonRoam.fullScreen,
-    this.nearbyRadius = 260,
-    this.roamSpeed = 2.6,
   });
 
   @override
@@ -94,23 +60,12 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
   final ValueNotifier<double> _repaint = ValueNotifier(0);
   final math.Random _rng = math.Random();
 
-  // mouse (in dragon space = screen pixels / scale)
-  Offset _mouse = const Offset(300, 300);
+  Offset _target = const Offset(300, 300);
   bool _hasPointer = false;
-  double _lastMove = -999;
-  bool _following = false;
-
-  // roaming
-  Offset _waypoint = const Offset(500, 300);
-  Offset _home = const Offset(400, 300);
-  double _nextWaypointAt = 0;
-  double _roamAngle = 0;
-  Size _cachedSize = const Size(800, 600); // screen size / scale
-
-  Duration _lastElapsed = Duration.zero;
   double _time = 0;
   double _phase = 0; // walking cycle, grows as the dragon moves
   double _speed = 0; // smoothed head speed
+  Size _cachedSize = const Size(800, 600); // cached so MediaQuery isn't hit every tick
 
   @override
   void initState() {
@@ -125,9 +80,8 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // updated on resize / rotation only, not every frame
+    // Cache the screen size; updated on MediaQuery changes (resize, orientation, etc.)
     _cachedSize = MediaQuery.sizeOf(context) / widget.scale;
-    _home = Offset(_cachedSize.width / 2, _cachedSize.height / 2);
   }
 
   Offset _jitter(double r) => Offset(
@@ -136,35 +90,20 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
       );
 
   void _onTick(Duration elapsed) {
-    final dt = ((elapsed - _lastElapsed).inMicroseconds / 16667.0)
-        .clamp(0.0, 3.0)
-        .toDouble();
-    _lastElapsed = elapsed;
     _time = elapsed.inMicroseconds / 1e6;
 
-    // Follow the mouse only when it is near the dragon and still moving.
-    final mouseActive =
-        _hasPointer && (_time - _lastMove) < widget.followHoldSeconds;
-    final dist = (_mouse - _points[0]).distance * widget.scale;
-    if (!_following) {
-      if (mouseActive && dist < widget.followRadius) _following = true;
-    } else if (!mouseActive || dist > widget.followRadius * 1.5) {
-      // lost the mouse: go back to roaming from where we are
-      _following = false;
-      _home = _points[0];
-      _pickWaypoint();
+    if (!_hasPointer) {
+      // Use cached size (updated in didChangeDependencies) — avoids MediaQuery on every tick
+      final size = _cachedSize;
+      _target = Offset(
+        size.width / 2 + math.cos(_time * 0.8) * size.width * 0.3,
+        size.height / 2 + math.sin(_time * 1.2) * size.height * 0.25,
+      );
     }
 
     final prevHead = _points[0];
-    if (_following) {
-      final f = 1 - math.pow(1 - 0.12, dt).toDouble();
-      _points[0] = Offset.lerp(_points[0], _mouse, f)!;
-    } else if (widget.roam != DragonRoam.off) {
-      _roam(dt);
-    }
-    final delta = _points[0] - prevHead;
-    final moved = delta.distance;
-    if (moved > 0.5) _roamAngle = math.atan2(delta.dy, delta.dx);
+    _points[0] = Offset.lerp(_points[0], _target, 0.12)!;
+    final moved = (_points[0] - prevHead).distance;
     _phase += moved * 0.09;
     _speed = _speed * 0.85 + moved * 0.15;
 
@@ -233,53 +172,7 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
 
   void _updateTarget(PointerEvent e) {
     _hasPointer = true;
-    _mouse = e.localPosition / widget.scale;
-    _lastMove = _time;
-  }
-
-  void _pickWaypoint() {
-    final s = _cachedSize;
-    const m = 90.0;
-    final maxX = math.max(m + 1, s.width - m);
-    final maxY = math.max(m + 1, s.height - m);
-
-    if (widget.roam == DragonRoam.nearby) {
-      final r = widget.nearbyRadius / widget.scale;
-      final ang = _rng.nextDouble() * math.pi * 2;
-      final d = r * (0.4 + 0.6 * _rng.nextDouble());
-      _waypoint = Offset(
-        (_home.dx + math.cos(ang) * d).clamp(m, maxX).toDouble(),
-        (_home.dy + math.sin(ang) * d).clamp(m, maxY).toDouble(),
-      );
-    } else {
-      _waypoint = Offset(
-        m + _rng.nextDouble() * (maxX - m),
-        m + _rng.nextDouble() * (maxY - m),
-      );
-    }
-    _nextWaypointAt = _time + 3 + _rng.nextDouble() * 4;
-  }
-
-  // Fly toward the waypoint with a limited turn rate, so it curves like a snake.
-  void _roam(double dt) {
-    if ((_points[0] - _waypoint).distance < 50 || _time > _nextWaypointAt) {
-      _pickWaypoint();
-    }
-    final to = _waypoint - _points[0];
-    final desired = math.atan2(to.dy, to.dx);
-
-    var diff = desired - _roamAngle;
-    while (diff > math.pi) {
-      diff -= math.pi * 2;
-    }
-    while (diff < -math.pi) {
-      diff += math.pi * 2;
-    }
-    final maxTurn = 0.05 * dt;
-    _roamAngle += diff.clamp(-maxTurn, maxTurn).toDouble();
-
-    final step = widget.roamSpeed * dt;
-    _points[0] += Offset(math.cos(_roamAngle), math.sin(_roamAngle)) * step;
+    _target = e.localPosition / widget.scale;
   }
 
   @override
@@ -655,7 +548,7 @@ class _DragonPainter extends CustomPainter {
   void _drawHead(Canvas canvas, double t) {
     final head = points[0];
     final a = _heading(0);
-    final fire = ((speedOf() - 2.8) / 6).clamp(0.0, 1.0).toDouble();
+    final fire = (speedOf() / 9).clamp(0.0, 1.0).toDouble();
     final pulse = 0.75 + 0.25 * math.sin(t * 4);
 
     canvas.save();
