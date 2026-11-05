@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -91,29 +90,43 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
         decoration: const BoxDecoration(color: C.bg),
         child: Stack(
           children: [
-            // hero-grid background
-            Positioned.fill(child: CustomPaint(painter: HeroGridPainter())),
+            // hero-grid background (isolated static layer)
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: CustomPaint(painter: HeroGridPainter()),
+              ),
+            ),
             // ── RED SCANNING LINE ──
-            const Positioned.fill(child: _ScanLine()),
+            const Positioned.fill(
+              child: RepaintBoundary(
+                child: _ScanLine(),
+              ),
+            ),
             // ── FLOATING PARTICLES ──
-            const Positioned.fill(child: _Particles()),
+            const Positioned.fill(
+              child: RepaintBoundary(
+                child: _Particles(),
+              ),
+            ),
             // ── GIANT BACKGROUND WORD ──
             Positioned.fill(
               child: IgnorePointer(
-                child: ClipRect(
-                  child: Center(
-                    child: ValueListenableBuilder<Offset>(
-                      valueListenable: _par,
-                      builder: (context, p, child) =>
-                          Transform.translate(offset: Offset(p.dx * -35, p.dy * -20), child: child),
-                      child: OverflowBox(
-                        minWidth: 0,
-                        maxWidth: double.infinity,
-                        child: Text(
-                          'PORTFOLIO',
-                          softWrap: false,
-                          textAlign: TextAlign.center,
-                          style: anton(size.width * 0.22, color: op(C.accent, 0.14), ls: -0.025, h: 1.0),
+                child: RepaintBoundary(
+                  child: ClipRect(
+                    child: Center(
+                      child: ValueListenableBuilder<Offset>(
+                        valueListenable: _par,
+                        builder: (context, p, child) =>
+                            Transform.translate(offset: Offset(p.dx * -35, p.dy * -20), child: child),
+                        child: OverflowBox(
+                          minWidth: 0,
+                          maxWidth: double.infinity,
+                          child: Text(
+                            'PORTFOLIO',
+                            softWrap: false,
+                            textAlign: TextAlign.center,
+                            style: anton(size.width * 0.22, color: op(C.accent, 0.14), ls: -0.025, h: 1.0),
+                          ),
                         ),
                       ),
                     ),
@@ -134,8 +147,9 @@ class _HeroSectionState extends State<HeroSection> with SingleTickerProviderStat
                     ),
                     child: ValueListenableBuilder<bool>(
                       valueListenable: app.preloaderDone,
-                      builder: (context, ready, _) =>
-                          _Foreground(contentWidth: Bp.content(context), trigger: ready),
+                      builder: (context, ready, _) => RepaintBoundary(
+                        child: _Foreground(contentWidth: Bp.content(context), trigger: ready),
+                      ),
                     ),
                   ),
                 ),
@@ -192,14 +206,14 @@ class _Particles extends StatelessWidget {
         builder: (context, cons) {
           return Stack(
             children: [
-              for (var i = 0; i < 14; i++)
+              for (var i = 0; i < 6; i++)
                 Positioned(
-                  left: cons.maxWidth * ((i * 7.5 + 4) % 95) / 100,
-                  top: cons.maxHeight * ((i * 13.3 + 8) % 90) / 100,
+                  left: cons.maxWidth * ((i * 16.5 + 6) % 95) / 100,
+                  top: cons.maxHeight * ((i * 15.3 + 10) % 90) / 100,
                   child: _Particle(
                     size: ((i % 3) + 2).toDouble(),
-                    duration: Duration(milliseconds: ((3 + (i % 4) * 1.5) * 1000).round()),
-                    delay: Duration(milliseconds: ((i % 5) * 0.4 * 1000).round()),
+                    duration: Duration(milliseconds: ((3 + (i % 3) * 1.5) * 1000).round()),
+                    delay: Duration(milliseconds: ((i % 4) * 0.4 * 1000).round()),
                   ),
                 ),
             ],
@@ -489,34 +503,29 @@ class _StatsColumn extends StatelessWidget {
     final big = md ? 48.0 : 36.0;
     final small = md ? 36.0 : 30.0;
 
-    final box = ClipRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: op(C.bg, 0.6),
-            border: Border(
-              left: lg ? BorderSide.none : BorderSide(color: wh(0.08)),
-              right: lg ? BorderSide(color: wh(0.08)) : BorderSide.none,
-            ),
-          ),
-          child: IntrinsicWidth(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _stat('1.7+ YRS', 'PROFESSIONAL EXP', C.accent, big, 400),
-                const SizedBox(height: 24),
-                _divider(),
-                const SizedBox(height: 24),
-                _stat('3 APPS', 'FEATURED BUILDS', Colors.white, big, 550),
-                const SizedBox(height: 24),
-                _divider(),
-                const SizedBox(height: 24),
-                _stat('FLUTTER', 'CORE ARCHITECTURE', C.accent, small, 700),
-              ],
-            ),
-          ),
+    final box = Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: op(C.bg, 0.88),
+        border: Border(
+          left: lg ? BorderSide.none : BorderSide(color: wh(0.08)),
+          right: lg ? BorderSide(color: wh(0.08)) : BorderSide.none,
+        ),
+      ),
+      child: IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _stat('1.7+ YRS', 'PROFESSIONAL EXP', C.accent, big, 400),
+            const SizedBox(height: 24),
+            _divider(),
+            const SizedBox(height: 24),
+            _stat('3 APPS', 'FEATURED BUILDS', Colors.white, big, 550),
+            const SizedBox(height: 24),
+            _divider(),
+            const SizedBox(height: 24),
+            _stat('FLUTTER', 'CORE ARCHITECTURE', C.accent, small, 700),
+          ],
         ),
       ),
     );

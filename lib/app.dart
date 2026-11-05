@@ -8,11 +8,9 @@ import 'components/cursor.dart';
 import 'components/footer.dart';
 import 'components/grain.dart';
 import 'components/navbar.dart';
-import 'components/preloader.dart';
 import 'components/scroll_progress.dart';
 import 'core/app_controller.dart';
 import 'core/theme.dart';
-import 'core/widgets.dart';
 import 'sections/about.dart';
 import 'sections/contact.dart';
 import 'sections/credentials.dart';
@@ -31,7 +29,6 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin {
-  bool _preloaderDone = false;
   late final Ticker _scrollTicker;
   double _targetScroll = 0;
   Duration _lastScrollTime = Duration.zero;
@@ -128,44 +125,29 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
           cursor: SystemMouseCursors.none,
           child: Stack(
             children: [
-              // page content (fades in once the preloader is done)
+              // Page content — shown directly (hacker loading screen handles the initial gate)
               Positioned.fill(
-                child: AnimatedOpacity(
-                  opacity: _preloaderDone ? 1 : 0,
-                  duration: const Duration(milliseconds: 700),
-                  curve: kTw,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: SingleChildScrollView(
-                          controller: app.scroll,
-                          physics: const ClampingScrollPhysics(),
-                          child: Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerSignal: _wheel,
-                            child: sections,
-                          ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: SingleChildScrollView(
+                        controller: app.scroll,
+                        physics: const ClampingScrollPhysics(),
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerSignal: _wheel,
+                          child: sections,
                         ),
                       ),
-                      const MobileMenu(),
-                      const Navbar(),
-                      const _CopiedToast(),
-                      const Positioned.fill(child: GrainOverlay()),
-                    ],
-                  ),
+                    ),
+                    const MobileMenu(),
+                    const Navbar(),
+                    const _CopiedToast(),
+                    const Positioned.fill(child: GrainOverlay()),
+                  ],
                 ),
               ),
               const ScrollProgress(),
-              if (!_preloaderDone)
-                Positioned.fill(
-                  child: Preloader(
-                    key: const ValueKey('preloader'),
-                    onComplete: () {
-                      app.preloaderDone.value = true;
-                      setState(() => _preloaderDone = true);
-                    },
-                  ),
-                ),
               const Positioned.fill(child: CustomCursor()),
             ],
           ),
