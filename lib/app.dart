@@ -4,7 +4,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import 'components/cursor.dart';
 import 'components/footer.dart';
 import 'components/grain.dart';
 import 'components/navbar.dart';
@@ -122,7 +121,7 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
         onPointerMove: _pointer,
         onPointerDown: _pointer,
         child: MouseRegion(
-          cursor: SystemMouseCursors.none,
+          cursor: SystemMouseCursors.basic,
           child: Stack(
             children: [
               // Page content — shown directly (hacker loading screen handles the initial gate)
@@ -148,7 +147,6 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
                 ),
               ),
               const ScrollProgress(),
-              const Positioned.fill(child: CustomCursor()),
             ],
           ),
         ),

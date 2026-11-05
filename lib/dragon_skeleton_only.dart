@@ -1,9 +1,46 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Wrap any page with this widget and a glowing dragon skeleton follows the mouse.
+/// What the dragon does when the mouse is NOT near it.
+enum DragonRoam {
+  /// Flies freely across the whole screen (and across all pages).
+  fullScreen,
+
+  /// Wanders only around the spot where it is now.
+  nearby,
+
+  /// Stays still until the mouse comes near.
+  off,
+}
+
+/// Visual style of the bait cursor replacing the mouse pointer.
+enum DragonCursorStyle {
+  /// A small glowing fire ember with a rotating thin ring and orbiting sparks.
+  ember,
+
+  /// A magical celestial orb with orbiting rings and shimmering motes.
+  orb,
+
+  /// Uses the default system pointer (no custom cursor drawn).
+  system,
+}
+
+/// Internal states of the dragon attraction and catching state machine.
+enum _DragonState {
+  roam,
+  notice,
+  stalk,
+  lunge,
+  snap,
+  recover,
+}
+
+/// Wrap any page with this widget and a glowing dragon skeleton follows the mouse
+/// or hunts the glowing bait cursor.
 ///
 /// Usage:
 /// DragonSkeletonCursor(child: YourPortfolioPage())
@@ -14,6 +51,11 @@ import 'package:flutter/scheduler.dart';
 ///   glowColor: Color(0xFFFF5A1F),         // fire orange (try cyan 0xFF18E0FF)
 ///   boneColor: Color(0xFFEFE8D6),
 ///   showEmbers: true,
+///   cursorStyle: DragonCursorStyle.ember,
+///   enableCatching: true,
+///   attractRadius: 320,
+///   lungeDistance: 90,
+///   catchCooldown: 2.5,
 ///   child: YourPortfolioPage(),
 /// )
 class DragonSkeletonCursor extends StatefulWidget {
@@ -28,6 +70,42 @@ class DragonSkeletonCursor extends StatefulWidget {
   /// Real blur glow looks nicer but is heavy. Keep false for smooth speed.
   final bool softGlow;
 
+  /// The dragon follows the mouse only when the mouse is closer than this
+  /// (in screen pixels). Used when enableCatching is false.
+  final double followRadius;
+
+  /// The dragon lets go of the mouse after it stops moving for this many
+  /// seconds. Use double.infinity to never let go.
+  final double followHoldSeconds;
+
+  /// What the dragon does when the mouse is not near.
+  final DragonRoam roam;
+
+  /// For DragonRoam.nearby: how far it wanders from its spot (screen pixels).
+  final double nearbyRadius;
+
+  /// Flying speed while roaming (higher = faster).
+  final double roamSpeed;
+
+  /// Bait cursor visual style (ember, orb, or system).
+  final DragonCursorStyle cursorStyle;
+
+  /// Whether to hide the operating system cursor over the app.
+  final bool hideSystemCursor;
+
+  /// Enables the attraction and catching state machine (notice -> stalk -> lunge -> snap -> recover).
+  /// When false, retains the original simple follow behavior.
+  final bool enableCatching;
+
+  /// Distance in screen pixels where the dragon notices the bait cursor.
+  final double attractRadius;
+
+  /// Distance in screen pixels where the dragon lunges at the bait cursor.
+  final double lungeDistance;
+
+  /// Seconds to ignore the mouse after snapping / catching before roaming again.
+  final double catchCooldown;
+
   const DragonSkeletonCursor({
     super.key,
     required this.child,
@@ -38,6 +116,17 @@ class DragonSkeletonCursor extends StatefulWidget {
     this.glowColor = const Color(0xFFFF5A1F),
     this.showEmbers = true,
     this.softGlow = false,
+    this.followRadius = 240,
+    this.followHoldSeconds = 3,
+    this.roam = DragonRoam.fullScreen,
+    this.nearbyRadius = 260,
+    this.roamSpeed = 2.6,
+    this.cursorStyle = DragonCursorStyle.ember,
+    this.hideSystemCursor = true,
+    this.enableCatching = true,
+    this.attractRadius = 320,
+    this.lungeDistance = 90,
+    this.catchCooldown = 2.5,
   });
 
   @override
@@ -60,16 +149,39 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
   final ValueNotifier<double> _repaint = ValueNotifier(0);
   final math.Random _rng = math.Random();
 
-  Offset _target = const Offset(300, 300);
+  // Mouse positions
+  Offset _rawMouse = const Offset(-999, -999); // Exact screen pixels
+  Offset _mouse = const Offset(300, 300); // In dragon space (screen / scale)
   bool _hasPointer = false;
+  bool _mouseInWindow = false;
+  bool _isTouch = false;
+  double _lastMove = -999;
+  bool _following = false; // For legacy follow mode
+
+  // State machine variables
+  _DragonState _state = _DragonState.roam;
+  double _stateTimer = 0.0;
+  double _snapFlash = 0.0; // 1.0 -> 0.0 flash when caught
+  double _catchRingRadius = 0.0; // Expands outward on snap
+  double _headShake = 0.0; // Oscillates during recover
+
+  // Roaming
+  Offset _waypoint = const Offset(500, 300);
+  Offset _home = const Offset(400, 300);
+  double _nextWaypointAt = 0;
+  double _roamAngle = 0;
+  Size _cachedSize = const Size(800, 600); // Screen size / scale
+
+  Duration _lastElapsed = Duration.zero;
   double _time = 0;
-  double _phase = 0; // walking cycle, grows as the dragon moves
-  double _speed = 0; // smoothed head speed
-  Size _cachedSize = const Size(800, 600); // cached so MediaQuery isn't hit every tick
+  double _phase = 0; // Walking cycle, grows as the dragon moves
+  double _speed = 0; // Smoothed head speed
 
   @override
   void initState() {
     super.initState();
+    _isTouch = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
     _points = List.generate(
       widget.segments,
       (i) => Offset(300 - i * widget.spacing, 300),
@@ -80,8 +192,9 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Cache the screen size; updated on MediaQuery changes (resize, orientation, etc.)
+    // Updated on resize / rotation only, not every frame
     _cachedSize = MediaQuery.sizeOf(context) / widget.scale;
+    _home = Offset(_cachedSize.width / 2, _cachedSize.height / 2);
   }
 
   Offset _jitter(double r) => Offset(
@@ -90,29 +203,70 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
       );
 
   void _onTick(Duration elapsed) {
+    final dtSeconds = _lastElapsed == Duration.zero
+        ? 0.016
+        : (elapsed - _lastElapsed).inMicroseconds / 1e6;
+    final dt = (dtSeconds / 0.016667).clamp(0.0, 3.0);
+    _lastElapsed = elapsed;
     _time = elapsed.inMicroseconds / 1e6;
 
-    if (!_hasPointer) {
-      // Use cached size (updated in didChangeDependencies) — avoids MediaQuery on every tick
-      final size = _cachedSize;
-      _target = Offset(
-        size.width / 2 + math.cos(_time * 0.8) * size.width * 0.3,
-        size.height / 2 + math.sin(_time * 1.2) * size.height * 0.25,
-      );
+    // Follow / attract only when pointer is active and moving inside window
+    final mouseActive = _hasPointer &&
+        _mouseInWindow &&
+        !_isTouch &&
+        (_time - _lastMove) < widget.followHoldSeconds;
+
+    final dist = (_mouse - _points[0]).distance * widget.scale;
+    final prevHead = _points[0];
+
+    if (!widget.enableCatching) {
+      // ── Legacy simple follow mode ──
+      if (!_following) {
+        if (mouseActive && dist < widget.followRadius) _following = true;
+      } else if (!mouseActive || dist > widget.followRadius * 1.5) {
+        _following = false;
+        _home = _points[0];
+        _pickWaypoint();
+      }
+
+      if (_following) {
+        final f = 1 - math.pow(1 - 0.12, dt).toDouble();
+        _points[0] = Offset.lerp(_points[0], _mouse, f)!;
+      } else if (widget.roam != DragonRoam.off) {
+        _roam(dt);
+      }
+    } else {
+      // ── Advanced Attraction & Catching State Machine ──
+      _tickStateMachine(dt, dtSeconds, mouseActive, dist);
     }
 
-    final prevHead = _points[0];
-    _points[0] = Offset.lerp(_points[0], _target, 0.12)!;
-    final moved = (_points[0] - prevHead).distance;
+    final delta = _points[0] - prevHead;
+    final moved = delta.distance;
+    if (moved > 0.4 && _state != _DragonState.notice) {
+      _roamAngle = math.atan2(delta.dy, delta.dx);
+    }
     _phase += moved * 0.09;
     _speed = _speed * 0.85 + moved * 0.15;
 
+    // Inverse kinematics spine link solver
     for (int i = 1; i < _points.length; i++) {
       final dir = _points[i - 1] - _points[i];
-      final dist = dir.distance;
-      if (dist > 0.001) {
-        _points[i] = _points[i - 1] - dir / dist * widget.spacing;
+      final d = dir.distance;
+      if (d > 0.001) {
+        _points[i] = _points[i - 1] - dir / d * widget.spacing;
       }
+    }
+
+    // Expanding catch ring animation & flash decay
+    if (_catchRingRadius > 0) {
+      _catchRingRadius += dt * 2.4;
+      if (_catchRingRadius > 42) _catchRingRadius = 0;
+    }
+    if (_snapFlash > 0) {
+      _snapFlash = math.max(0.0, _snapFlash - dt * 0.07);
+    }
+    if (_headShake > 0) {
+      _headShake = math.max(0.0, _headShake - dt * 0.04);
     }
 
     if (widget.showEmbers) _updateEmbers();
@@ -120,11 +274,148 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
     _repaint.value = _time;
   }
 
+  void _tickStateMachine(
+    double dt,
+    double dtSeconds,
+    bool mouseActive,
+    double dist,
+  ) {
+    switch (_state) {
+      case _DragonState.roam:
+        if (widget.roam != DragonRoam.off) {
+          _roam(dt);
+        }
+        if (mouseActive && dist < widget.attractRadius) {
+          _state = _DragonState.notice;
+          _stateTimer = 0.3; // Stare and focus for 0.3s
+        }
+        break;
+
+      case _DragonState.notice:
+        // Dragon stops, turns head to the cursor
+        _turnToward(_mouse, 0.12 * dt);
+        _stateTimer -= dtSeconds;
+
+        if (!mouseActive || dist > widget.attractRadius * 1.35) {
+          _state = _DragonState.roam;
+          _home = _points[0];
+          _pickWaypoint();
+        } else if (_stateTimer <= 0) {
+          _state = _DragonState.stalk;
+        }
+        break;
+
+      case _DragonState.stalk:
+        // Approach slowly in a curved snake-like path
+        _turnToward(_mouse, 0.055 * dt);
+        final stalkSpeed = (widget.roamSpeed * 0.85 + 0.3) * dt;
+        _points[0] += Offset(math.cos(_roamAngle), math.sin(_roamAngle)) * stalkSpeed;
+
+        if (dist < widget.lungeDistance && mouseActive) {
+          _state = _DragonState.lunge;
+          _stateTimer = 0.65; // Max lunge window
+        } else if (!mouseActive || dist > widget.attractRadius * 1.45) {
+          _state = _DragonState.roam;
+          _home = _points[0];
+          _pickWaypoint();
+        }
+        break;
+
+      case _DragonState.lunge:
+        // Dash quickly toward the cursor with jaws open
+        _turnToward(_mouse, 0.14 * dt);
+        final lungeSpeed = (widget.roamSpeed * 3.4 + 2.8) * dt;
+        _points[0] += Offset(math.cos(_roamAngle), math.sin(_roamAngle)) * lungeSpeed;
+
+        _stateTimer -= dtSeconds;
+        // Hit check
+        final catchRadius = (28.0 * widget.scale).clamp(18.0, 32.0);
+        if (dist < catchRadius) {
+          // CAUGHT!
+          _state = _DragonState.snap;
+          _stateTimer = 0.32;
+          _snapFlash = 1.0;
+          _catchRingRadius = 4.0;
+          _triggerCatchBurst(_mouse);
+        } else if (_stateTimer <= 0 || dist > widget.lungeDistance * 1.85) {
+          // Missed! Snaps at empty air and enters recover
+          _state = _DragonState.recover;
+          _stateTimer = widget.catchCooldown * 0.65;
+          _headShake = 1.0;
+          _home = _points[0];
+          _pickWaypoint();
+        }
+        break;
+
+      case _DragonState.snap:
+        // Jaws clamped shut; brief hold
+        _stateTimer -= dtSeconds;
+        if (_stateTimer <= 0) {
+          _state = _DragonState.recover;
+          _stateTimer = widget.catchCooldown;
+          _headShake = 1.0;
+          _home = _points[0];
+          _pickWaypoint();
+        }
+        break;
+
+      case _DragonState.recover:
+        // Shake head, veer away from cursor and ignore mouse
+        final awayAng = math.atan2(_points[0].dy - _mouse.dy, _points[0].dx - _mouse.dx);
+        _turnTowardAngle(awayAng, 0.045 * dt);
+        final step = widget.roamSpeed * dt;
+        _points[0] += Offset(math.cos(_roamAngle), math.sin(_roamAngle)) * step;
+
+        _stateTimer -= dtSeconds;
+        if (_stateTimer <= 0) {
+          _state = _DragonState.roam;
+          _pickWaypoint();
+        }
+        break;
+    }
+  }
+
+  void _turnToward(Offset target, double maxTurn) {
+    final to = target - _points[0];
+    if (to.distance < 0.001) return;
+    final desired = math.atan2(to.dy, to.dx);
+    _turnTowardAngle(desired, maxTurn);
+  }
+
+  void _turnTowardAngle(double desired, double maxTurn) {
+    var diff = desired - _roamAngle;
+    while (diff > math.pi) {
+      diff -= math.pi * 2;
+    }
+    while (diff < -math.pi) {
+      diff += math.pi * 2;
+    }
+    _roamAngle += diff.clamp(-maxTurn, maxTurn).toDouble();
+  }
+
+  void _triggerCatchBurst(Offset origin) {
+    if (!widget.showEmbers) return;
+    const count = 14;
+    for (int k = 0; k < count; k++) {
+      final ang = _rng.nextDouble() * math.pi * 2;
+      final spd = 1.8 + _rng.nextDouble() * 3.6;
+      _embers.add(_Ember(
+        origin + _jitter(4),
+        Offset(math.cos(ang), math.sin(ang)) * spd,
+        1.0,
+        1.4 + _rng.nextDouble() * 1.8,
+      ));
+    }
+    if (_embers.length > 80) {
+      _embers.removeRange(0, _embers.length - 80);
+    }
+  }
+
   void _updateEmbers() {
     final n = _points.length;
 
-    // tail embers
-    if (_speed > 0.8 && _rng.nextDouble() < 0.55) {
+    // Tail embers
+    if (_speed > 0.8 && _rng.nextDouble() < 0.50 && _embers.length < 80) {
       _embers.add(_Ember(
         _points[n - 1] + _jitter(4),
         _jitter(0.6),
@@ -133,9 +424,9 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
       ));
     }
 
-    // body sparks
-    if (_speed > 1.5 && _rng.nextDouble() < 0.35) {
-      final i = 4 + _rng.nextInt(n - 8);
+    // Body sparks
+    if (_speed > 1.5 && _rng.nextDouble() < 0.30 && _embers.length < 80) {
+      final i = 4 + _rng.nextInt(math.max(1, n - 8));
       _embers.add(_Ember(
         _points[i] + _jitter(8),
         _jitter(0.8),
@@ -144,8 +435,8 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
       ));
     }
 
-    // mouth sparks
-    if (_speed > 3 && _rng.nextDouble() < 0.6) {
+    // Mouth sparks
+    if (_speed > 3 && _rng.nextDouble() < 0.55 && _embers.length < 80) {
       final d = _points[0] - _points[1];
       final dist = d.distance;
       if (dist > 0.001) {
@@ -156,6 +447,27 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
           1,
           1.5 + _rng.nextDouble() * 1.8,
         ));
+      }
+    }
+
+    // Attraction stream of sparks: flows from cursor toward dragon's mouth
+    if (widget.enableCatching &&
+        (_state == _DragonState.notice || _state == _DragonState.stalk) &&
+        _embers.length < 76) {
+      final chance = _state == _DragonState.notice ? 0.45 : 0.25;
+      if (_rng.nextDouble() < chance) {
+        final toMouth = _points[0] - _mouse;
+        final d = toMouth.distance;
+        if (d > 2) {
+          final dir = toMouth / d;
+          final spd = 2.4 + _rng.nextDouble() * 2.6;
+          _embers.add(_Ember(
+            _mouse + _jitter(4),
+            dir * spd + _jitter(0.5),
+            1.0,
+            1.1 + _rng.nextDouble() * 1.3,
+          ));
+        }
       }
     }
 
@@ -171,8 +483,51 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
   }
 
   void _updateTarget(PointerEvent e) {
+    if (e.kind == PointerDeviceKind.touch) {
+      _isTouch = true;
+      return;
+    }
     _hasPointer = true;
-    _target = e.localPosition / widget.scale;
+    _mouseInWindow = true;
+    _rawMouse = e.localPosition;
+    _mouse = e.localPosition / widget.scale;
+    _lastMove = _time;
+  }
+
+  void _pickWaypoint() {
+    final s = _cachedSize;
+    const m = 90.0;
+    final maxX = math.max(m + 1, s.width - m);
+    final maxY = math.max(m + 1, s.height - m);
+
+    if (widget.roam == DragonRoam.nearby) {
+      final r = widget.nearbyRadius / widget.scale;
+      final ang = _rng.nextDouble() * math.pi * 2;
+      final d = r * (0.4 + 0.6 * _rng.nextDouble());
+      _waypoint = Offset(
+        (_home.dx + math.cos(ang) * d).clamp(m, maxX).toDouble(),
+        (_home.dy + math.sin(ang) * d).clamp(m, maxY).toDouble(),
+      );
+    } else {
+      _waypoint = Offset(
+        m + _rng.nextDouble() * (maxX - m),
+        m + _rng.nextDouble() * (maxY - m),
+      );
+    }
+    _nextWaypointAt = _time + 3 + _rng.nextDouble() * 4;
+  }
+
+  // Fly toward the waypoint with a limited turn rate, so it curves like a snake.
+  void _roam(double dt) {
+    if ((_points[0] - _waypoint).distance < 50 || _time > _nextWaypointAt) {
+      _pickWaypoint();
+    }
+    final to = _waypoint - _points[0];
+    final desired = math.atan2(to.dy, to.dx);
+    _turnTowardAngle(desired, 0.05 * dt);
+
+    final step = widget.roamSpeed * dt;
+    _points[0] += Offset(math.cos(_roamAngle), math.sin(_roamAngle)) * step;
   }
 
   @override
@@ -184,35 +539,56 @@ class _DragonSkeletonCursorState extends State<DragonSkeletonCursor>
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerHover: _updateTarget,
-      onPointerMove: _updateTarget,
-      onPointerDown: _updateTarget,
-      child: Stack(
-        children: [
-          Positioned.fill(child: widget.child),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  painter: _DragonPainter(
-                    points: _points,
-                    embers: _embers,
-                    repaint: _repaint,
-                    timeOf: () => _time,
-                    phaseOf: () => _phase,
-                    speedOf: () => _speed,
-                    scale: widget.scale,
-                    bone: widget.boneColor,
-                    glow: widget.glowColor,
-                    softGlow: widget.softGlow,
+    final hideCursor = !_isTouch &&
+        widget.hideSystemCursor &&
+        widget.cursorStyle != DragonCursorStyle.system &&
+        _hasPointer &&
+        _mouseInWindow;
+
+    return MouseRegion(
+      opaque: false,
+      cursor: hideCursor ? SystemMouseCursors.none : MouseCursor.defer,
+      onEnter: (_) => _mouseInWindow = true,
+      onExit: (_) => _mouseInWindow = false,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerHover: _updateTarget,
+        onPointerMove: _updateTarget,
+        onPointerDown: _updateTarget,
+        child: Stack(
+          children: [
+            Positioned.fill(child: widget.child),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _DragonPainter(
+                      points: _points,
+                      embers: _embers,
+                      repaint: _repaint,
+                      timeOf: () => _time,
+                      phaseOf: () => _phase,
+                      speedOf: () => _speed,
+                      stateOf: () => _state,
+                      rawMouseOf: () => _rawMouse,
+                      hasPointerOf: () => _hasPointer,
+                      mouseInWindowOf: () => _mouseInWindow,
+                      isTouchOf: () => _isTouch,
+                      snapFlashOf: () => _snapFlash,
+                      catchRingRadiusOf: () => _catchRingRadius,
+                      headShakeOf: () => _headShake,
+                      scale: widget.scale,
+                      bone: widget.boneColor,
+                      glow: widget.glowColor,
+                      softGlow: widget.softGlow,
+                      cursorStyle: widget.cursorStyle,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -224,10 +600,20 @@ class _DragonPainter extends CustomPainter {
   final double Function() timeOf;
   final double Function() phaseOf;
   final double Function() speedOf;
+  final _DragonState Function() stateOf;
+  final Offset Function() rawMouseOf;
+  final bool Function() hasPointerOf;
+  final bool Function() mouseInWindowOf;
+  final bool Function() isTouchOf;
+  final double Function() snapFlashOf;
+  final double Function() catchRingRadiusOf;
+  final double Function() headShakeOf;
+
   final double scale;
   final Color bone;
   final Color glow;
   final bool softGlow;
+  final DragonCursorStyle cursorStyle;
 
   _DragonPainter({
     required this.points,
@@ -235,26 +621,44 @@ class _DragonPainter extends CustomPainter {
     required this.timeOf,
     required this.phaseOf,
     required this.speedOf,
+    required this.stateOf,
+    required this.rawMouseOf,
+    required this.hasPointerOf,
+    required this.mouseInWindowOf,
+    required this.isTouchOf,
+    required this.snapFlashOf,
+    required this.catchRingRadiusOf,
+    required this.headShakeOf,
     required this.scale,
     required this.bone,
     required this.glow,
     required this.softGlow,
+    required this.cursorStyle,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
   Color get boneDark => Color.lerp(bone, Colors.black, 0.45)!;
 
-  Paint _stroke(Color c, double w) => Paint()
-    ..color = c
+  // Reusable paints to avoid per-frame allocations
+  final Paint _fill = Paint()..style = PaintingStyle.fill;
+  final Paint _strokePaint = Paint()
     ..style = PaintingStyle.stroke
-    ..strokeWidth = w
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
 
+  Paint _stroke(Color c, double w) => _strokePaint
+    ..color = c
+    ..strokeWidth = w
+    ..maskFilter = null;
+
   Paint _blur(Color c, double sigma) {
-    final p = Paint()..color = c;
-    if (softGlow) p.maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
-    return p;
+    _fill.color = c;
+    if (softGlow) {
+      _fill.maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
+    } else {
+      _fill.maskFilter = null;
+    }
+    return _fill;
   }
 
   double _heading(int i) {
@@ -293,6 +697,9 @@ class _DragonPainter extends CustomPainter {
     _drawHead(canvas, t);
 
     canvas.restore();
+
+    // Bait cursor drawn on top in exact 1:1 screen coordinates
+    _drawBaitCursor(canvas, t);
   }
 
   // ---------------------------------------------------------------- embers
@@ -343,7 +750,7 @@ class _DragonPainter extends CustomPainter {
       final tx = math.cos(a);
       final ty = math.sin(a);
 
-      // dorsal spike
+      // Dorsal spike
       final len = 4 + 9 * taper;
       final spike = Path()
         ..moveTo(p.dx + tx * 2.5, p.dy + ty * 2.5)
@@ -351,12 +758,15 @@ class _DragonPainter extends CustomPainter {
         ..lineTo(p.dx - tx * len, p.dy - ty * len)
         ..lineTo(p.dx - nx * 1.8, p.dy - ny * 1.8)
         ..close();
-      canvas.drawPath(spike, Paint()..color = glow.withAlpha(200));
+      _fill.color = glow.withAlpha(200);
+      _fill.maskFilter = null;
+      canvas.drawPath(spike, _fill);
 
-      // vertebra
-      canvas.drawCircle(p, 1.6 + 3.4 * taper, Paint()..color = col);
+      // Vertebra
+      _fill.color = col;
+      canvas.drawCircle(p, 1.6 + 3.4 * taper, _fill);
 
-      // ribs on the torso
+      // Ribs on the torso
       if (i > 2 && i < n * 0.72) {
         final ribLen = 4 + 24 * taper;
         final ribPaint = _stroke(col, 1.2 + 1.6 * taper);
@@ -372,11 +782,13 @@ class _DragonPainter extends CustomPainter {
             ..moveTo(p.dx, p.dy)
             ..quadraticBezierTo(ctrl.dx, ctrl.dy, end.dx, end.dy);
           canvas.drawPath(rib, ribPaint);
-          canvas.drawCircle(end, 1.1, Paint()..color = glow.withAlpha(220));
+
+          _fill.color = glow.withAlpha(220);
+          canvas.drawCircle(end, 1.1, _fill);
         }
       }
 
-      // side spikes on the tail
+      // Side spikes on the tail
       if (i >= n * 0.72 && i % 2 == 0) {
         final sp = _stroke(col, 1.2);
         for (final s in [-1.0, 1.0]) {
@@ -409,7 +821,9 @@ class _DragonPainter extends CustomPainter {
       ..close();
 
     canvas.drawPath(blade, _blur(glow.withAlpha(120), 5));
-    canvas.drawPath(blade, Paint()..color = glow.withAlpha(190));
+    _fill.color = glow.withAlpha(190);
+    _fill.maskFilter = null;
+    canvas.drawPath(blade, _fill);
     canvas.drawPath(blade, _stroke(bone.withAlpha(220), 1.2));
     canvas.drawLine(p, tip, _stroke(bone.withAlpha(200), 1));
   }
@@ -451,7 +865,7 @@ class _DragonPainter extends CustomPainter {
       ..quadraticBezierTo(c3.dx, c3.dy, back.dx, back.dy)
       ..close();
 
-    // glowing membrane, stronger toward the edges
+    // Glowing membrane
     canvas.drawPath(
       membrane,
       Paint()
@@ -472,21 +886,24 @@ class _DragonPainter extends CustomPainter {
     );
     canvas.drawPath(membrane, _stroke(bone.withAlpha(110), 1));
 
-    // veins
+    // Veins
     final vein = _stroke(bone.withAlpha(70), 0.8);
     canvas.drawLine(elbow, Offset.lerp(tips[0], tips[1], 0.5)!, vein);
     canvas.drawLine(elbow, Offset.lerp(tips[1], tips[2], 0.5)!, vein);
     canvas.drawLine(anchor, Offset.lerp(tips[2], back, 0.5)!, vein);
 
-    // bones
+    // Bones
     canvas.drawLine(anchor, elbow, _stroke(bone, 2.8));
     final fingerPaint = _stroke(bone, 1.8);
     for (final tip in tips) {
       canvas.drawLine(elbow, tip, fingerPaint);
       canvas.drawCircle(tip, 2.2, _blur(glow.withAlpha(230), 1.5));
     }
-    canvas.drawCircle(elbow, 3, Paint()..color = bone);
-    canvas.drawCircle(elbow, 1.4, Paint()..color = glow);
+    _fill.color = bone;
+    _fill.maskFilter = null;
+    canvas.drawCircle(elbow, 3, _fill);
+    _fill.color = glow;
+    canvas.drawCircle(elbow, 1.4, _fill);
   }
 
   // ------------------------------------------------------------------ limbs
@@ -521,13 +938,15 @@ class _DragonPainter extends CustomPainter {
     canvas.drawLine(anchor, joint, _stroke(bone, 3.2));
     canvas.drawLine(joint, wrist, _stroke(bone, 2.4));
 
-    final fill = Paint()..color = bone;
-    final dot = Paint()..color = glow;
-    canvas.drawCircle(anchor, 4.5, fill);
-    canvas.drawCircle(anchor, 1.8, dot);
-    canvas.drawCircle(joint, 3.2, fill);
-    canvas.drawCircle(joint, 1.3, dot);
-    canvas.drawCircle(wrist, 2.6, fill);
+    _fill.color = bone;
+    _fill.maskFilter = null;
+    canvas.drawCircle(anchor, 4.5, _fill);
+    canvas.drawCircle(joint, 3.2, _fill);
+    canvas.drawCircle(wrist, 2.6, _fill);
+
+    _fill.color = glow;
+    canvas.drawCircle(anchor, 1.8, _fill);
+    canvas.drawCircle(joint, 1.3, _fill);
 
     final fingerPaint = _stroke(bone, 1.6);
     final clawPaint = _stroke(Color.lerp(bone, glow, 0.6)!, 1.4);
@@ -540,7 +959,8 @@ class _DragonPainter extends CustomPainter {
 
       canvas.drawLine(wrist, knuckle, fingerPaint);
       canvas.drawLine(knuckle, tip, clawPaint);
-      canvas.drawCircle(knuckle, 1.3, fill);
+      _fill.color = bone;
+      canvas.drawCircle(knuckle, 1.3, _fill);
     }
   }
 
@@ -548,14 +968,21 @@ class _DragonPainter extends CustomPainter {
   void _drawHead(Canvas canvas, double t) {
     final head = points[0];
     final a = _heading(0);
-    final fire = (speedOf() / 9).clamp(0.0, 1.0).toDouble();
+    final state = stateOf();
+    final fire = ((speedOf() - 2.8) / 6).clamp(0.0, 1.0).toDouble();
     final pulse = 0.75 + 0.25 * math.sin(t * 4);
+    final headShake = headShakeOf();
 
     canvas.save();
     canvas.translate(head.dx, head.dy);
     canvas.rotate(a);
 
-    // soft glow under the head (only with real blur)
+    // Subtle head oscillation when recovering from snapping
+    if (headShake > 0) {
+      canvas.rotate(math.sin(t * 30) * 0.22 * headShake);
+    }
+
+    // Soft glow under the head
     if (softGlow) {
       canvas.drawCircle(
         const Offset(10, 0),
@@ -564,7 +991,7 @@ class _DragonPainter extends CustomPainter {
       );
     }
 
-    // whiskers
+    // Whiskers
     final whisker = _stroke(bone.withAlpha(200), 1.2);
     for (final s in [-1.0, 1.0]) {
       final w1 = math.sin(t * 4) * 4;
@@ -580,7 +1007,7 @@ class _DragonPainter extends CustomPainter {
       );
     }
 
-    // horns with glowing tips
+    // Horns with glowing tips
     for (final s in [-1.0, 1.0]) {
       final horn = Path()
         ..moveTo(-4, 9 * s)
@@ -593,7 +1020,7 @@ class _DragonPainter extends CustomPainter {
       );
     }
 
-    // skull
+    // Skull
     final skull = Path()
       ..moveTo(-12, 0)
       ..cubicTo(-12, -13, 8, -13, 24, -5)
@@ -603,20 +1030,40 @@ class _DragonPainter extends CustomPainter {
       ..cubicTo(8, 13, -12, 13, -12, 0)
       ..close();
 
-    canvas.drawPath(skull, Paint()..color = const Color(0xFF14141C));
+    _fill.color = const Color(0xFF14141C);
+    _fill.maskFilter = null;
+    canvas.drawPath(skull, _fill);
     canvas.drawPath(skull, _stroke(bone, 2));
 
-    // crest diamond
+    // Crest diamond
     final crest = Path()
       ..moveTo(-7, 0)
       ..lineTo(0, -3)
       ..lineTo(8, 0)
       ..lineTo(0, 3)
       ..close();
-    canvas.drawPath(crest, Paint()..color = glow.withAlpha(170));
+    _fill.color = glow.withAlpha(170);
+    canvas.drawPath(crest, _fill);
 
-    // mouth + teeth
-    final mouthOpen = (math.sin(t * 2.5) * 0.5 + 0.5) * 1.5 + fire * 3;
+    // Mouth + teeth opening depending on state
+    double mouthOpen;
+    switch (state) {
+      case _DragonState.lunge:
+        mouthOpen = 6.8; // Jaws wide open during lunge!
+        break;
+      case _DragonState.stalk:
+        mouthOpen = 2.6 + math.sin(t * 4) * 0.8;
+        break;
+      case _DragonState.snap:
+        mouthOpen = 0.0; // Clamped shut!
+        break;
+      case _DragonState.notice:
+        mouthOpen = 1.0;
+        break;
+      default:
+        mouthOpen = (math.sin(t * 2.5) * 0.5 + 0.5) * 1.5 + fire * 3;
+    }
+
     canvas.drawLine(const Offset(8, 0), const Offset(34, 0), _stroke(bone, 1.2));
     final tooth = _stroke(bone, 1.5);
     for (double x = 14; x <= 32; x += 4) {
@@ -626,29 +1073,39 @@ class _DragonPainter extends CustomPainter {
           Offset(x, -y), Offset(x + 0.6, -y - 2.5 - mouthOpen), tooth);
     }
 
-    // eyes + nostrils
+    // Eyes + nostrils (eyes grow larger & brighter when noticing or stalking)
+    final isNoticing = state == _DragonState.notice || state == _DragonState.stalk;
+    final eyeScale = isNoticing ? 1.35 : 1.0;
+    final eyeAlpha = isNoticing ? 255 : (170 * pulse).round();
+
     for (final s in [-1.0, 1.0]) {
-      canvas.drawCircle(Offset(4, 6 * s), 4.2, Paint()..color = Colors.black);
+      _fill.color = Colors.black;
+      _fill.maskFilter = null;
+      canvas.drawCircle(Offset(4, 6 * s), 4.2 * eyeScale, _fill);
       canvas.drawCircle(
         Offset(4, 6 * s),
-        6.5,
-        _blur(glow.withAlpha((170 * pulse).round()), 5),
+        6.5 * eyeScale,
+        _blur(glow.withAlpha(eyeAlpha), 5),
       );
-      canvas.drawCircle(Offset(4.5, 6 * s), 2.2, Paint()..color = glow);
+      _fill.color = glow;
+      _fill.maskFilter = null;
+      canvas.drawCircle(Offset(4.5, 6 * s), 2.2 * eyeScale, _fill);
+      _fill.color = const Color(0xFFFFF1B8);
       canvas.drawCircle(
         Offset(4.8, 6 * s),
-        1.1,
-        Paint()..color = const Color(0xFFFFF1B8),
+        1.1 * eyeScale,
+        _fill,
       );
-      canvas.drawCircle(Offset(29, 1.6 * s), 0.9, Paint()..color = Colors.black);
+      _fill.color = Colors.black;
+      canvas.drawCircle(Offset(29, 1.6 * s), 0.9, _fill);
     }
 
-    // brow ridge
+    // Brow ridge
     canvas.drawLine(const Offset(-2, -9), const Offset(12, -8), _stroke(bone, 1.4));
     canvas.drawLine(const Offset(-2, 9), const Offset(12, 8), _stroke(bone, 1.4));
 
-    // fire breath when moving fast
-    if (fire > 0.08) {
+    // Fire breath when moving fast
+    if (fire > 0.08 && state != _DragonState.snap) {
       for (int k = 0; k < 6; k++) {
         final flick = math.sin(t * 28 + k * 1.7);
         final x = 36.0 + k * 6.5 * (0.5 + fire);
@@ -664,6 +1121,140 @@ class _DragonPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  // ---------------------------------------------------------- bait cursor
+  void _drawBaitCursor(Canvas canvas, double t) {
+    if (cursorStyle == DragonCursorStyle.system) return;
+    if (isTouchOf() || !hasPointerOf() || !mouseInWindowOf()) return;
+
+    final pos = rawMouseOf();
+    if (pos.dx < 0 || pos.dy < 0) return;
+
+    final flash = snapFlashOf(); // 1.0 -> 0.0 flash when caught
+    final ringR = catchRingRadiusOf();
+    final state = stateOf();
+    final isNoticing = state == _DragonState.notice || state == _DragonState.stalk;
+    final isLunge = state == _DragonState.lunge;
+
+    // Expanding snap ring effect when caught
+    if (ringR > 0 && ringR < 45) {
+      final ringAlpha = (1.0 - ringR / 45.0).clamp(0.0, 1.0);
+      _strokePaint
+        ..color = glow.withAlpha((ringAlpha * 230).round())
+        ..strokeWidth = 1.8
+        ..maskFilter = null;
+      canvas.drawCircle(pos, ringR, _strokePaint);
+    }
+
+    if (cursorStyle == DragonCursorStyle.ember) {
+      _drawEmberCursor(canvas, pos, t, flash, isNoticing, isLunge);
+    } else if (cursorStyle == DragonCursorStyle.orb) {
+      _drawOrbCursor(canvas, pos, t, flash, isNoticing, isLunge);
+    }
+  }
+
+  void _drawEmberCursor(
+    Canvas canvas,
+    Offset pos,
+    double t,
+    double flash,
+    bool isNoticing,
+    bool isLunge,
+  ) {
+    // Outer glow circles (faked with lightweight translucent circles)
+    final outerAlpha = isNoticing ? 90 : 50;
+    final midAlpha = isNoticing ? 160 : 100;
+    _fill.maskFilter = null;
+
+    _fill.color = glow.withAlpha(outerAlpha);
+    canvas.drawCircle(pos, 11.0 + (isNoticing ? 3.0 : 0.0), _fill);
+
+    _fill.color = glow.withAlpha(midAlpha);
+    canvas.drawCircle(pos, 6.5 + (isNoticing ? 2.0 : 0.0), _fill);
+
+    // Rotating thin ring with 2 arcs
+    final rot = t * (isLunge ? 8.0 : (isNoticing ? 5.0 : 3.0));
+    final ringRadius = 11.5 + (isNoticing ? 2.0 : 0.0);
+    _strokePaint
+      ..color = (flash > 0.1 ? Colors.white : glow).withAlpha(isNoticing ? 220 : 160)
+      ..strokeWidth = 1.0
+      ..maskFilter = null;
+
+    final rect = Rect.fromCircle(center: pos, radius: ringRadius);
+    canvas.drawArc(rect, rot, math.pi * 0.72, false, _strokePaint);
+    canvas.drawArc(rect, rot + math.pi, math.pi * 0.72, false, _strokePaint);
+
+    // 3 tiny orbiting sparks
+    for (int i = 0; i < 3; i++) {
+      final ang = -rot * 0.8 + (i * math.pi * 2 / 3);
+      final spDist = ringRadius + 2.5 + math.sin(t * 5 + i) * 1.5;
+      final sp = pos + Offset(math.cos(ang), math.sin(ang)) * spDist;
+      _fill.color = const Color(0xFFFFD57A).withAlpha(220);
+      canvas.drawCircle(sp, 1.1, _fill);
+    }
+
+    // Center ember core (shrinks slightly on flash, then restores)
+    final coreR = 3.6 * (1.0 - flash * 0.35);
+    _fill.color = flash > 0.1
+        ? Colors.white
+        : Color.lerp(glow, const Color(0xFFFFF2B2), 0.75)!;
+    canvas.drawCircle(pos, coreR, _fill);
+
+    _fill.color = Colors.white;
+    canvas.drawCircle(pos, coreR * 0.55, _fill);
+  }
+
+  void _drawOrbCursor(
+    Canvas canvas,
+    Offset pos,
+    double t,
+    double flash,
+    bool isNoticing,
+    bool isLunge,
+  ) {
+    // Shimmering mystical orb
+    final rot = t * (isLunge ? 6.0 : (isNoticing ? 4.5 : 2.5));
+    _fill.maskFilter = null;
+
+    _fill.color = glow.withAlpha(isNoticing ? 80 : 45);
+    canvas.drawCircle(pos, 13.0, _fill);
+
+    _fill.color = glow.withAlpha(isNoticing ? 160 : 110);
+    canvas.drawCircle(pos, 7.5, _fill);
+
+    // Orbit ellipse ring
+    _strokePaint
+      ..color = (flash > 0.1 ? Colors.white : glow).withAlpha(180)
+      ..strokeWidth = 1.0
+      ..maskFilter = null;
+
+    canvas.save();
+    canvas.translate(pos.dx, pos.dy);
+    canvas.rotate(rot);
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset.zero, width: 26, height: 12),
+      _strokePaint,
+    );
+
+    // Orbiting satellite motes
+    final m1 = Offset(math.cos(rot * 2) * 13, math.sin(rot * 2) * 6);
+    final m2 = Offset(-m1.dx, -m1.dy);
+    _fill.color = const Color(0xFFFFF1C2);
+    canvas.drawCircle(m1, 1.2, _fill);
+    canvas.drawCircle(m2, 1.0, _fill);
+    canvas.restore();
+
+    // Central orb sphere
+    final orbR = 4.4 * (1.0 - flash * 0.3);
+    _fill.color = flash > 0.1
+        ? Colors.white
+        : Color.lerp(glow, const Color(0xFFE6F4FF), 0.65)!;
+    canvas.drawCircle(pos, orbR, _fill);
+
+    // Specular highlight
+    _fill.color = Colors.white;
+    canvas.drawCircle(Offset(pos.dx - 1.2, pos.dy - 1.2), orbR * 0.45, _fill);
   }
 
   @override

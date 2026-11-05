@@ -358,8 +358,11 @@ class _HovState extends State<Hov> {
 
   @override
   Widget build(BuildContext context) {
+    final sys = widget.sysCursor != MouseCursor.defer
+        ? widget.sysCursor
+        : (widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer);
     Widget w = MouseRegion(
-      cursor: widget.sysCursor,
+      cursor: sys,
       opaque: widget.opaque,
       onEnter: (_) {
         setState(() => _h = true);
