@@ -4,6 +4,7 @@ name: Deploy Main and Dev Flutter Portfolios
 on:
   push:
     branches:
+      - main
       - dev
 
   workflow_dispatch:
@@ -23,41 +24,46 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      # Checkout both branches
+      # Checkout main branch
+      - name: Checkout Main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          path: main-source
 
+      # Checkout dev branch
       - name: Checkout Dev
         uses: actions/checkout@v5
         with:
           ref: dev
           path: dev-source
 
-      # Install Flutter
+      # Setup Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # Build Main Portfolio
+      # Build main portfolio
       - name: Build Main
+        working-directory: main-source
         run: |
-          cd main-source
           flutter pub get
           flutter build web --release \
             --base-href "/portfolio/"
 
-      # Build Dev Portfolio
+      # Build dev portfolio
       - name: Build Dev
+        working-directory: dev-source
         run: |
-          cd dev-source
           flutter pub get
           flutter build web --release \
             --base-href "/portfolio/dev/"
 
-      # Combine both websites
+      # Combine both builds
       - name: Combine Websites
         run: |
-          mkdir -p site
           mkdir -p site/dev
 
           cp -r main-source/build/web/. site/
@@ -66,7 +72,7 @@ jobs:
           cp site/index.html site/404.html
           cp site/dev/index.html site/dev/404.html
 
-      # Upload combined website
+      # Upload combined artifact
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v4
         with:
