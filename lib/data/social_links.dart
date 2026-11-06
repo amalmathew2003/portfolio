@@ -1,15 +1,27 @@
-/// Centralized real social links & contact information for Amal Mathew.
+
 class SocialLinks {
   SocialLinks._();
 
   static const String email = 'mathewamalmathew@gmail.com';
-  static const String emailMailto = 'mailto:mathewamalmathew@gmail.com';
+
+  static const String emailMailto =
+      'mailto:mathewamalmathew@gmail.com';
+
   static const String emailSubject =
       'mailto:mathewamalmathew@gmail.com?subject=Project%20Inquiry%20-%20Flutter%20Development';
-  static const String linkedInUrl = 'https://www.linkedin.com/in/amal-mathew-1-/';
-  static const String linkedInDisplay = 'linkedin.com/in/amal-mathew-1-/';
-  static const String githubUrl = 'https://github.com/amalmathew2003';
-  static const String githubDisplay = 'github.com/amalmathew2003';
+
+  static const String linkedInUrl =
+      'https://www.linkedin.com/in/amal-mathew-1-/';
+
+  static const String linkedInDisplay =
+      'linkedin.com/in/amal-mathew-1-/';
+
+  static const String githubUrl =
+      'https://github.com/amalmathew2003';
+
+  static const String githubDisplay =
+      'github.com/amalmathew2003';
+
   static const String cvDownloadUrl =
-      'https://drive.google.com/uc?export=download&id=1vg50mxVox4a6OyzBaDB-Mz06LCYULs3W&utm_source=chatgpt.com';
+      'https://drive.google.com/uc?export=download&id=1vg50mxVox4a6OyzBaDB-Mz06LCYULs3W';
 }
