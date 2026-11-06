@@ -565,7 +565,7 @@ class _DragonPainter extends CustomPainter {
   void _drawHairline(Canvas canvas, Size size) {
     const pad = 28.0;
     final y = size.height - 24;
-    final x0 = pad;
+    const x0 = pad;
     final x1 = size.width - pad;
 
     _line(canvas, Offset(x0, y), Offset(x1, y), 1, 0.16);
