@@ -35,6 +35,18 @@ class NameLoadingScreen extends StatefulWidget {
   final double? nameY;
   final double? dragonY;
 
+  /// Font of the name. Must be declared in pubspec.yaml (see notes), e.g.
+  /// 'Orbitron', 'Bebas Neue', 'Playfair Display'. null = default font.
+  final String? nameFont;
+  final FontWeight nameWeight;
+
+  /// Easiest way to use any Google font (needs the google_fonts package):
+  ///   nameStyle: GoogleFonts.orbitron(),
+  ///   fontReady: GoogleFonts.pendingFonts([GoogleFonts.orbitron()]),
+  /// fontReady makes the animation wait until the font has loaded.
+  final TextStyle? nameStyle;
+  final Future<void>? fontReady;
+
   const NameLoadingScreen({
     super.key,
     required this.onFinished,
@@ -46,6 +58,10 @@ class NameLoadingScreen extends StatefulWidget {
     this.nameScale = 1.0,
     this.nameY,
     this.dragonY,
+    this.nameFont,
+    this.nameWeight = FontWeight.w700,
+    this.nameStyle,
+    this.fontReady,
   });
 
   @override
@@ -54,7 +70,8 @@ class NameLoadingScreen extends StatefulWidget {
 
 class _NameLoadingScreenState extends State<NameLoadingScreen>
     with SingleTickerProviderStateMixin {
-  late final Ticker _ticker;
+  Ticker? _ticker;
+  _NameDragonPainter? _painter;
   final math.Random _rng = math.Random(7);
   late final _Scene _scene;
 
@@ -77,6 +94,32 @@ class _NameLoadingScreenState extends State<NameLoadingScreen>
   void initState() {
     super.initState();
     _scene = _Scene(_rng);
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    final f = widget.fontReady;
+    if (f != null) {
+      try {
+        await f.timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _painter = _NameDragonPainter(
+        _scene,
+        widget.color,
+        widget.scale,
+        widget.nameScale,
+        widget.nameY,
+        widget.dragonY,
+        widget.nameFont,
+        widget.nameWeight,
+        widget.nameStyle,
+        widget.tagline,
+        _frame,
+      );
+    });
     _ticker = createTicker(_onTick)..start();
   }
 
@@ -132,7 +175,7 @@ class _NameLoadingScreenState extends State<NameLoadingScreen>
       _scene.exit = ((t - _phaseStart) / 0.85).clamp(0.0, 1.0).toDouble();
       if (_scene.exit >= 1) {
         _phase = 3;
-        _ticker.stop();
+        _ticker?.stop();
         widget.onFinished();
       }
     }
@@ -168,7 +211,7 @@ class _NameLoadingScreenState extends State<NameLoadingScreen>
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _ticker?.dispose();
     _frame.dispose();
     _pct.dispose();
     _log.dispose();
@@ -184,18 +227,7 @@ class _NameLoadingScreenState extends State<NameLoadingScreen>
         children: [
           Positioned.fill(
             child: RepaintBoundary(
-              child: CustomPaint(
-                painter: _NameDragonPainter(
-                  _scene,
-                  widget.color,
-                  widget.scale,
-                  widget.nameScale,
-                  widget.nameY,
-                  widget.dragonY,
-                  widget.tagline,
-                  _frame,
-                ),
-              ),
+              child: CustomPaint(painter: _painter),
             ),
           ),
           Positioned.fill(
@@ -392,6 +424,7 @@ class _Scene {
   double flare = 0;
   int built = 0;
   int letBuilt = 0;
+  double tagStart = -1; // when the tagline starts decoding (right after the name)
 
   // dragon
   final List<double> spawn = List.filled(n, -1);
@@ -480,12 +513,15 @@ class _Scene {
         final since = time - letSpawn[i];
         final l = (since / 0.55).clamp(0.0, 1.0).toDouble();
         e = 1 - math.pow(1 - l, 3).toDouble();
-        final land = since - 0.55;
+        final land = since - 1.1; // locks onto the real letter
         if (land > 0) pop = math.exp(-land * 6);
       }
       letEase[i] = e;
       letPop[i] = pop;
     }
+
+    // tagline starts as soon as the last letter of the name has appeared
+    if (letBuilt >= nameN && tagStart < 0) tagStart = time + 0.35;
 
     final target = progress >= 1 ? 1.0 : 0.0;
     flare += (target - flare) * math.min(1.0, dt * 5);
@@ -522,6 +558,19 @@ double _smooth(double x) {
 }
 
 // ================================================================= the painter
+class _FontSpec {
+  final String? family;
+  final FontWeight weight;
+  final FontStyle fontStyle;
+  final List<String>? fallback;
+  const _FontSpec(
+    this.family,
+    this.weight, [
+    this.fontStyle = FontStyle.normal,
+    this.fallback,
+  ]);
+}
+
 class _NameDragonPainter extends CustomPainter {
   final _Scene s;
   final Color color;
@@ -529,6 +578,9 @@ class _NameDragonPainter extends CustomPainter {
   final double nameMul;
   final double? nameY;
   final double? dragonY;
+  final String? nameFont;
+  final FontWeight nameWeight;
+  final TextStyle? nameStyle;
   final String tagline;
 
   double fade = 1;
@@ -538,12 +590,28 @@ class _NameDragonPainter extends CustomPainter {
     ..strokeJoin = StrokeJoin.round;
   final Paint _f = Paint()..style = PaintingStyle.fill;
 
-  late final List<TextPainter> _outline;
-  late final List<TextPainter> _fill;
-  late final List<TextPainter> _glow;
-  late final TextPainter _tag;
+  // [fontIndex][letter]; the LAST font index is the final font.
+  late final List<List<TextPainter>> _outline;
+  late final List<List<TextPainter>> _fill;
+  late final List<List<TextPainter>> _glow;
 
-  static const double _adv = 66.0; // width of one letter slot (name units)
+  /// Random characters each letter cycles through before it locks.
+  static const String _pool =
+      'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789#@\$%&*<>/{}[]=+?';
+  late final List<TextPainter> _scr;
+
+  /// How long (seconds) each letter scrambles after it appears.
+  static const double _shuffleTime = 1.1;
+  // tagline (same font + decode effect as the name)
+  late final List<TextPainter> _tagFill;
+  late final List<TextPainter> _tagGlow;
+  late final List<TextPainter> _scrFill;
+  late final List<double> _tagPos;
+  late final double _tagTotal;
+  late final List<Offset> _slotsLand;
+  late final List<Offset> _slotsPort;
+  late final double _totalLand;
+  late final double _totalPort;
 
   _NameDragonPainter(
     this.s,
@@ -552,17 +620,20 @@ class _NameDragonPainter extends CustomPainter {
     this.nameMul,
     this.nameY,
     this.dragonY,
+    this.nameFont,
+    this.nameWeight,
+    this.nameStyle,
     this.tagline,
     Listenable repaint,
   ) : super(repaint: repaint) {
-    TextStyle style({Paint? fg, Color? c, FontWeight w = FontWeight.w300}) =>
-        TextStyle(
-          fontFamily: 'monospace',
-          fontFamilyFallback: _kMonoFallback,
+    TextStyle style(_FontSpec sp, {Paint? fg, Color? c}) => TextStyle(
+          fontFamily: sp.family,
+          fontFamilyFallback: sp.fallback,
+          fontStyle: sp.fontStyle,
           fontSize: 100,
           height: 1,
           letterSpacing: 6,
-          fontWeight: w,
+          fontWeight: sp.weight,
           decoration: TextDecoration.none,
           color: fg == null ? c : null,
           foreground: fg,
@@ -582,32 +653,103 @@ class _NameDragonPainter extends CustomPainter {
       ..color = color
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
 
+    final specs = <_FontSpec>[
+      // final font: a TextStyle (e.g. GoogleFonts.orbitron()) wins over nameFont
+      _FontSpec(
+        nameStyle?.fontFamily ?? nameFont,
+        nameStyle?.fontWeight ?? nameWeight,
+        nameStyle?.fontStyle ?? FontStyle.normal,
+        nameStyle?.fontFamilyFallback,
+      ),
+    ];
+    _scr = [
+      for (int i = 0; i < _pool.length; i++)
+        mk(_pool[i], style(const _FontSpec('monospace', FontWeight.w300),
+            fg: stroke)),
+    ];
     _outline = [
-      for (int i = 0; i < _Scene.nameN; i++)
-        mk(_Scene.letters[i], style(fg: stroke, w: FontWeight.w200)),
+      for (final sp in specs)
+        [
+          for (int i = 0; i < _Scene.nameN; i++)
+            mk(_Scene.letters[i], style(sp, fg: stroke)),
+        ],
     ];
     _fill = [
-      for (int i = 0; i < _Scene.nameN; i++)
-        mk(_Scene.letters[i], style(c: color, w: FontWeight.w300)),
+      for (final sp in specs)
+        [
+          for (int i = 0; i < _Scene.nameN; i++)
+            mk(_Scene.letters[i], style(sp, c: color)),
+        ],
     ];
     _glow = [
-      for (int i = 0; i < _Scene.nameN; i++)
-        mk(_Scene.letters[i], style(fg: blur, w: FontWeight.w400)),
+      for (final sp in specs)
+        [
+          for (int i = 0; i < _Scene.nameN; i++)
+            mk(_Scene.letters[i], style(sp, fg: blur)),
+        ],
     ];
-    _tag = TextPainter(
-      text: TextSpan(
-        text: tagline,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontFamilyFallback: _kMonoFallback,
-          fontSize: 18,
-          letterSpacing: 10,
-          decoration: TextDecoration.none,
-          color: color,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+    _scrFill = [
+      for (int i = 0; i < _pool.length; i++)
+        mk(_pool[i], style(const _FontSpec('monospace', FontWeight.w400),
+            c: color)),
+    ];
+    _tagFill = [
+      for (int i = 0; i < tagline.length; i++) mk(tagline[i], style(specs[0], c: color)),
+    ];
+    _tagGlow = [
+      for (int i = 0; i < tagline.length; i++) mk(tagline[i], style(specs[0], fg: blur)),
+    ];
+    {
+      const track = 22.0; // extra spacing between tagline letters
+      final tw = [for (final t in _tagFill) t.width + track];
+      final tt = tw.fold<double>(0, (a, b) => a + b);
+      final pos = <double>[];
+      double tx = -tt / 2;
+      for (int i = 0; i < tw.length; i++) {
+        pos.add(tx + tw[i] / 2);
+        tx += tw[i];
+      }
+      _tagPos = pos;
+      _tagTotal = tt;
+    }
+
+    // lay the letters out by their real widths (works with any font)
+    final wd = [for (final t in _outline.last) t.width];
+    double sum(int a, int b) {
+      double t = 0;
+      for (int i = a; i < b; i++) {
+        t += wd[i];
+      }
+      return t;
+    }
+
+    const gap = 50.0;
+    final total = sum(0, 10) + gap;
+    final land = <Offset>[];
+    double x = -total / 2;
+    for (int i = 0; i < _Scene.nameN; i++) {
+      if (i == 4) x += gap;
+      land.add(Offset(x + wd[i] / 2, 0));
+      x += wd[i];
+    }
+    final port = <Offset>[];
+    final w1 = sum(0, 4);
+    final w2 = sum(4, 10);
+    double x1 = -w1 / 2;
+    double x2 = -w2 / 2;
+    for (int i = 0; i < _Scene.nameN; i++) {
+      if (i < 4) {
+        port.add(Offset(x1 + wd[i] / 2, -62));
+        x1 += wd[i];
+      } else {
+        port.add(Offset(x2 + wd[i] / 2, 62));
+        x2 += wd[i];
+      }
+    }
+    _slotsLand = land;
+    _slotsPort = port;
+    _totalLand = total;
+    _totalPort = math.max(w1, w2);
   }
 
   Color col(double a) =>
@@ -652,6 +794,7 @@ class _NameDragonPainter extends CustomPainter {
     final dragonCy = h * (dragonY ?? (portrait ? 0.64 : 0.68));
 
     _drawDust(canvas, size);
+    _drawSpotlight(canvas, size, portrait);
     _drawRing(canvas, size);
     _drawName(canvas, size, portrait);
 
@@ -692,24 +835,29 @@ class _NameDragonPainter extends CustomPainter {
     }
   }
 
-  // ------------------------------------------------------------- the name
-  Offset _slot(int j, bool portrait) {
-    if (portrait) {
-      // two lines: AMAL / MATHEW
-      if (j < 4) return Offset((j - 1.5) * _adv, -62);
-      return Offset((j - 4 - 2.5) * _adv, 62);
-    }
-    // one line: AMAL_MATHEW (the space takes one slot)
-    if (j < 4) return Offset((j - 5) * _adv, 0);
-    return Offset((j - 4) * _adv, 0);
+  // soft light behind the name: grows as the letters appear, brighter at 100%
+  void _drawSpotlight(Canvas canvas, Size size, bool portrait) {
+    final cy = size.height * (nameY ?? (portrait ? 0.2 : 0.27));
+    final amt = (s.letBuilt / _Scene.nameN) * 0.07 + s.flare * 0.10;
+    if (amt <= 0.003) return;
+    final c = Offset(size.width / 2, cy);
+    final r = size.width * 0.7;
+    _f.shader = RadialGradient(colors: [col(amt), col(0)])
+        .createShader(Rect.fromCircle(center: c, radius: r));
+    canvas.drawRect(Offset.zero & size, _f);
+    _f.shader = null;
   }
+
+  // ------------------------------------------------------------- the name
+  Offset _slot(int j, bool portrait) =>
+      portrait ? _slotsPort[j] : _slotsLand[j];
 
   void _drawName(Canvas canvas, Size size, bool portrait) {
     final w = size.width;
     final h = size.height;
     final double k = portrait
-        ? math.min(w * 0.86 / (6 * _adv), h * 0.2 / 224) * nameMul
-        : math.min(w * 0.88 / (11 * _adv), h * 0.2 / 100) * nameMul;
+        ? math.min(w * 0.86 / _totalPort, h * 0.2 / 224) * nameMul
+        : math.min(w * 0.88 / _totalLand, h * 0.2 / 100) * nameMul;
     final nameCy = h * (nameY ?? (portrait ? 0.2 : 0.27));
 
     canvas.save();
@@ -719,6 +867,12 @@ class _NameDragonPainter extends CustomPainter {
       canvas.scale(zs);
     }
     canvas.scale(k);
+
+    // a band of light sweeps across the name once it is loaded
+    final total = portrait ? _totalPort : _totalLand;
+    final sweep = s.flare > 0.5
+        ? -total / 2 - 150 + ((s.time * 260) % (total + 500))
+        : -99999.0;
 
     for (int j = 0; j < _Scene.nameN; j++) {
       final e = s.letEase[j];
@@ -731,55 +885,118 @@ class _NameDragonPainter extends CustomPainter {
       );
       final p = _slot(j, portrait) + wave + s.letOffs[j] * (1 - e);
 
-      final o = _outline[j];
+      final dd = (p.dx - sweep) / 90;
+      final shine = s.flare * math.exp(-dd * dd);
+
+      // decode effect: random characters flick by, then lock to the real letter
+      final since = s.time - s.letSpawn[j];
+      final scrambling = since < _shuffleTime;
+      final hsh = (since * 18).floor() * 31 + j * 17 + j * j * 5;
+      final o = scrambling ? _scr[hsh % _pool.length] : _outline[0][j];
       final bounds = Rect.fromLTWH(-50, -50, o.width + 100, o.height + 100);
 
       canvas.save();
       canvas.translate(p.dx, p.dy);
       canvas.rotate((1 - e) * 0.9);
       canvas.scale((0.6 + 0.4 * e) * (1 + 0.2 * pop));
-      canvas.translate(-o.width / 2, -o.height / 2);
 
-      // soft glow: a travelling pulse once loaded, a flash when it lands
-      final glowA =
-          e * (s.flare * (0.35 + 0.25 * math.sin(s.time * 3 - j * 0.5)) + pop * 0.6);
+      final glowA = scrambling
+          ? 0.0
+          : e *
+              (s.flare * (0.35 + 0.25 * math.sin(s.time * 3 - j * 0.5)) +
+                  pop * 0.6 +
+                  shine * 0.9);
+      final outA = e * (0.5 + 0.5 * s.flare) + pop * 0.4 + shine * 0.4;
+
+      canvas.translate(-o.width / 2, -o.height / 2);
       if (glowA > 0.01) {
         canvas.saveLayer(bounds, Paint()..color = col(glowA));
-        _glow[j].paint(canvas, Offset.zero);
+        _glow[0][j].paint(canvas, Offset.zero);
         canvas.restore();
       }
-
-      // faint fill after loading
-      if (s.flare > 0.01) {
-        canvas.saveLayer(bounds, Paint()..color = col(e * s.flare * 0.28));
-        _fill[j].paint(canvas, Offset.zero);
+      if (s.flare > 0.01 && !scrambling) {
+        canvas.saveLayer(
+            bounds, Paint()..color = col(e * s.flare * 0.28 + shine * 0.5));
+        _fill[0][j].paint(canvas, Offset.zero);
         canvas.restore();
       }
-
-      // outline
-      final outA = e * (0.5 + 0.5 * s.flare) + pop * 0.4;
       canvas.saveLayer(bounds, Paint()..color = col(outA));
       o.paint(canvas, Offset.zero);
       canvas.restore();
+
+      // glitch echo: a ghost copy slides off the letter when it locks
+      if (pop > 0.05 && !scrambling) {
+        canvas.save();
+        canvas.translate(pop * 12, 0);
+        canvas.saveLayer(bounds, Paint()..color = col(pop * 0.45));
+        o.paint(canvas, Offset.zero);
+        canvas.restore();
+        canvas.restore();
+      }
 
       canvas.restore();
     }
     canvas.restore();
 
-    // tagline fades in under the name
-    if (s.flare > 0.01) {
-      final ts = math.min(1.0, w * 0.8 / _tag.width);
-      final y = nameCy + ((portrait ? 62 : 0) + 50 + 26) * k;
+    // tagline: same font + decode effect, appears right after the name
+    if (s.tagStart >= 0 && s.time >= s.tagStart) {
+      final ts = math.min(k * 0.28, w * 0.86 / _tagTotal);
+      final y = nameCy + ((portrait ? 62 : 0) + 50 + 34) * k;
       canvas.save();
       canvas.translate(w / 2, y);
       canvas.scale(ts);
-      canvas.translate(-_tag.width / 2, 0);
-      canvas.saveLayer(
-        Rect.fromLTWH(-20, -20, _tag.width + 40, _tag.height + 40),
-        Paint()..color = col(0.85 * s.flare),
-      );
-      _tag.paint(canvas, Offset.zero);
-      canvas.restore();
+      for (int i = 0; i < _tagFill.length; i++) {
+        if (tagline[i] == ' ') continue;
+        final since = s.time - s.tagStart - i * 0.035;
+        if (since < 0) continue;
+        final scr = since < 0.7;
+        final hsh = (since * 18).floor() * 29 + i * 13 + i * i * 3;
+        final tp = scr ? _scrFill[hsh % _pool.length] : _tagFill[i];
+        final pop = scr ? 0.0 : math.exp(-(since - 0.7) * 6);
+        final bounds =
+            Rect.fromLTWH(-50, -50, tp.width + 100, tp.height + 100);
+
+        canvas.save();
+        canvas.translate(_tagPos[i], 0);
+        canvas.scale(1 + 0.25 * pop);
+        canvas.translate(-tp.width / 2, -tp.height / 2);
+
+        // glow: flash when a letter locks, travelling pulse at 100%
+        final gA = scr
+            ? 0.0
+            : pop * 0.8 +
+                s.flare * (0.25 + 0.2 * math.sin(s.time * 3 - i * 0.4));
+        if (gA > 0.02) {
+          canvas.saveLayer(bounds, Paint()..color = col(gA));
+          _tagGlow[i].paint(canvas, Offset.zero);
+          canvas.restore();
+        }
+        canvas.saveLayer(
+          bounds,
+          Paint()..color = col(scr ? 0.6 : 0.72 + 0.28 * s.flare),
+        );
+        tp.paint(canvas, Offset.zero);
+        canvas.restore();
+        canvas.restore();
+      }
+
+      // thin line under the tagline that grows out from the centre, with a
+      // little light that keeps sweeping along it
+      final grow = _smooth((s.time - s.tagStart) / 0.9);
+      if (grow > 0.01) {
+        final half = _tagTotal / 2 * grow;
+        const ly = 78.0;
+        _line(canvas, Offset(-half, ly), Offset(half, ly), 3, 0.22);
+        _dot(canvas, Offset(-half, ly), 3.5, 0.6);
+        _dot(canvas, Offset(half, ly), 3.5, 0.6);
+        if (grow > 0.95) {
+          final u = (s.time * 0.5) % 1.0;
+          final cx = -half + 2 * half * u;
+          final a0 = math.max(-half, cx - 70);
+          final a1 = math.min(half, cx + 70);
+          _line(canvas, Offset(a0, ly), Offset(a1, ly), 4, 0.9);
+        }
+      }
       canvas.restore();
     }
   }
@@ -806,6 +1023,23 @@ class _NameDragonPainter extends CustomPainter {
         long ? 1.4 : 1.0,
         lit ? (long ? 0.75 : 0.45) : 0.10,
       );
+    }
+
+    // inner ring: tiny dashes drifting one way, bright arcs the other way
+    final r2 = r * 0.93 * zoom;
+    final dashRect = Rect.fromCircle(center: c, radius: r2);
+    _s.strokeWidth = 1.0;
+    _s.color = col(0.12 + s.flare * 0.12);
+    for (int i = 0; i < 48; i++) {
+      final a = i / 48 * math.pi * 2 - s.time * 0.25;
+      canvas.drawArc(dashRect, a, 0.05, false, _s);
+    }
+    final arcRect = Rect.fromCircle(center: c, radius: r * 0.965 * zoom);
+    _s.strokeWidth = 1.6;
+    _s.color = col(0.18 + s.flare * 0.3);
+    for (int k = 0; k < 3; k++) {
+      final a = s.time * 0.6 + k * math.pi * 2 / 3;
+      canvas.drawArc(arcRect, a, 0.45, false, _s);
     }
 
     // a little satellite that orbits the ring
@@ -858,7 +1092,7 @@ class _NameDragonPainter extends CustomPainter {
   void _drawHairline(Canvas canvas, Size size) {
     const pad = 28.0;
     final y = size.height - 24;
-    final x0 = pad;
+    const x0 = pad;
     final x1 = size.width - pad;
 
     _line(canvas, Offset(x0, y), Offset(x1, y), 1, 0.16);
@@ -1046,6 +1280,17 @@ class _NameDragonPainter extends CustomPainter {
     canvas.translate(p.dx, p.dy);
     canvas.rotate(a);
     canvas.scale(1.25 * (0.7 + 0.3 * e));
+
+    // soft glow around the head when the eyes ignite
+    if (eg > 0.01) {
+      canvas.drawCircle(
+        const Offset(10, 0),
+        24,
+        Paint()
+          ..color = col(0.35 * eg)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+      );
+    }
 
     // whiskers
     for (final sd in const [-1.0, 1.0]) {
