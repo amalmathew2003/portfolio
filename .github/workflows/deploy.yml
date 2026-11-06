@@ -4,7 +4,6 @@ name: Deploy Main and Dev Flutter Portfolios
 on:
   push:
     branches:
-      - main
       - dev
 
   workflow_dispatch:
@@ -25,11 +24,6 @@ jobs:
 
     steps:
       # Checkout both branches
-      - name: Checkout Main
-        uses: actions/checkout@v5
-        with:
-          ref: main
-          path: main-source
 
       - name: Checkout Dev
         uses: actions/checkout@v5
