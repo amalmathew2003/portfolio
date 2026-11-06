@@ -49,7 +49,10 @@ class CredentialsSection extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 384),
           child: Hov(
             cursor: CursorMode.hover,
-            onTap: () => launchUrl(Uri.parse(SocialLinks.cvDownloadUrl)),
+            onTap: () => launchUrl(
+              Uri.parse(SocialLinks.cvDownloadUrl),
+              mode: LaunchMode.externalApplication,
+            ),
             builder: (context, h) => Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(

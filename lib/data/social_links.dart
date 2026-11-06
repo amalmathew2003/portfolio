@@ -11,6 +11,5 @@ class SocialLinks {
   static const String githubUrl = 'https://github.com/amalmathew2003';
   static const String githubDisplay = 'github.com/amalmathew2003';
   static const String cvDownloadUrl =
-      'https://drive.google.com/uc?export=download&id=17h5411blpgTnBbFyKTYms1dgPzZRhPzX';
+      'https://drive.google.com/uc?export=download&id=1vg50mxVox4a6OyzBaDB-Mz06LCYULs3W&utm_source=chatgpt.com';
 }
-

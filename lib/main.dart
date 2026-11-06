@@ -84,7 +84,7 @@ class _HackerGateState extends State<_HackerGate> {
       return const ColoredBox(color: Color(0xFF000000));
     }
 
-    return HackerLoadingScreen(
+    return DragonLoadingScreen(
       title: 'PORTFOLIO',
       onFinished: _onFinished,
     );
