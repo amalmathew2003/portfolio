@@ -5,10 +5,13 @@ on:
   push:
     branches:
       - main
+      - dev
+
   pull_request:
     branches:
       - main
-      - dev      
+      - dev
+
   workflow_dispatch:
 
 permissions:
@@ -26,35 +29,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout source code
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Install Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # Install dependencies
       - name: Install Dependencies
         run: flutter pub get
 
-      # Build Flutter web
-      - name: Build Web Release
+      - name: Build Flutter Web
         run: |
           flutter build web \
             --release \
             --base-href "/${{ github.event.repository.name }}/"
 
-      # Create 404 page for SPA routing
       - name: Configure SPA Routing
         run: cp build/web/index.html build/web/404.html
 
-      # Upload build artifact
       - name: Upload GitHub Pages Artifact
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
@@ -63,7 +60,7 @@ jobs:
     name: Deploy to GitHub Pages
     needs: build
 
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
 
     runs-on: ubuntu-latest
 
