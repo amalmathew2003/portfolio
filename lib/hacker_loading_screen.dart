@@ -2,12 +2,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Loading screen: a dragon skeleton assembles itself bone by bone while the
-/// number counts up. At 100% the eyes ignite, the wings flare, and the dragon
-/// flies through the screen. Black background, white only.
+/// Loading screen: "AMAL MATHEW" drops in letter by letter behind a dragon
+/// skeleton that assembles itself bone by bone while the number counts up.
+/// At 100% the letters fill and glow, the dragon's eyes ignite, the wings
+/// flare, and the dragon flies through the screen.
+/// Black background, white only.
 ///
 /// Usage:
-/// DragonLoadingScreen(
+/// NameLoadingScreen(
 ///   duration: Duration(seconds: 6),
 ///   onFinished: () {
 ///     Navigator.of(context).pushReplacement(
@@ -15,29 +17,42 @@ import 'package:flutter/scheduler.dart';
 ///     );
 ///   },
 /// )
-class DragonLoadingScreen extends StatefulWidget {
+class NameLoadingScreen extends StatefulWidget {
   final VoidCallback onFinished;
   final Duration duration;
   final String title;
+  final String tagline;
   final Color color;
 
   /// Size of the dragon. 1.0 = fills the screen nicely, 0.7 = smaller.
   final double scale;
 
-  const DragonLoadingScreen({
+  /// Size of the name. 1.0 = fits the screen, 0.8 = smaller.
+  final double nameScale;
+
+  /// Vertical centre of the name / dragon as a fraction of the screen height
+  /// (0 = top, 1 = bottom). Leave null for the automatic layout.
+  final double? nameY;
+  final double? dragonY;
+
+  const NameLoadingScreen({
     super.key,
     required this.onFinished,
     this.duration = const Duration(seconds: 6),
     this.title = 'PORTFOLIO',
+    this.tagline = 'FLUTTER DEVELOPER',
     this.color = const Color(0xFFFFFFFF),
     this.scale = 1.0,
+    this.nameScale = 1.0,
+    this.nameY,
+    this.dragonY,
   });
 
   @override
-  State<DragonLoadingScreen> createState() => _DragonLoadingScreenState();
+  State<NameLoadingScreen> createState() => _NameLoadingScreenState();
 }
 
-class _DragonLoadingScreenState extends State<DragonLoadingScreen>
+class _NameLoadingScreenState extends State<NameLoadingScreen>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   final math.Random _rng = math.Random(7);
@@ -52,6 +67,7 @@ class _DragonLoadingScreenState extends State<DragonLoadingScreen>
   double _phaseStart = 0;
   double _lastT = 0;
   int _lastBuilt = 0;
+  bool _msgName = false;
   bool _msgWings = false;
   bool _msgEyes = false;
   bool _msgDone = false;
@@ -128,6 +144,10 @@ class _DragonLoadingScreenState extends State<DragonLoadingScreen>
       _lastBuilt = _scene.built;
       _push('> vertebra ${_scene.built}/${_Scene.n} locked');
     }
+    if (!_msgName && _scene.letBuilt >= _Scene.nameN) {
+      _msgName = true;
+      _push('> identity: AMAL MATHEW');
+    }
     if (!_msgWings && _scene.progress > 0.68) {
       _msgWings = true;
       _push('> unfolding wings');
@@ -165,10 +185,14 @@ class _DragonLoadingScreenState extends State<DragonLoadingScreen>
           Positioned.fill(
             child: RepaintBoundary(
               child: CustomPaint(
-                painter: _DragonPainter(
+                painter: _NameDragonPainter(
                   _scene,
                   widget.color,
                   widget.scale,
+                  widget.nameScale,
+                  widget.nameY,
+                  widget.dragonY,
+                  widget.tagline,
                   _frame,
                 ),
               ),
@@ -358,12 +382,18 @@ class _Scene {
   static const int n = 44; // number of vertebrae, index 0 = tail, n-1 = head
   static const double len = 13.0 * (n - 1);
 
+  /// The name, without the space: AMAL (0-3) + MATHEW (4-9).
+  static const String letters = 'AMALMATHEW';
+  static const int nameN = 10;
+
   double time = 0;
   double progress = 0;
   double exit = 0;
   double flare = 0;
   int built = 0;
+  int letBuilt = 0;
 
+  // dragon
   final List<double> spawn = List.filled(n, -1);
   final List<double> ease = List.filled(n, 0);
   final List<Offset> offs = [];
@@ -373,11 +403,22 @@ class _Scene {
   final List<_Spark> sparks = [];
   final List<_Dust> dust = [];
 
+  // name letters
+  final List<double> letSpawn = List.filled(nameN, -1);
+  final List<double> letEase = List.filled(nameN, 0);
+  final List<double> letPop = List.filled(nameN, 0);
+  final List<Offset> letOffs = [];
+
   _Scene(math.Random rng) {
     for (int i = 0; i < n; i++) {
       final a = rng.nextDouble() * math.pi * 2;
       final d = 90 + rng.nextDouble() * 170;
       offs.add(Offset(math.cos(a) * d, math.sin(a) * d));
+    }
+    for (int i = 0; i < nameN; i++) {
+      final a = rng.nextDouble() * math.pi * 2;
+      final d = 220 + rng.nextDouble() * 320;
+      letOffs.add(Offset(math.cos(a) * d, math.sin(a) * d));
     }
     for (int i = 0; i < 70; i++) {
       dust.add(_Dust(
@@ -426,6 +467,26 @@ class _Scene {
       built++;
     }
 
+    // name letters drop in a little ahead of the dragon
+    final wantL = progress / 0.86 * nameN;
+    while (letBuilt < nameN && wantL >= letBuilt) {
+      letSpawn[letBuilt] = time;
+      letBuilt++;
+    }
+    for (int i = 0; i < nameN; i++) {
+      double e = 0;
+      double pop = 0;
+      if (letSpawn[i] >= 0) {
+        final since = time - letSpawn[i];
+        final l = (since / 0.55).clamp(0.0, 1.0).toDouble();
+        e = 1 - math.pow(1 - l, 3).toDouble();
+        final land = since - 0.55;
+        if (land > 0) pop = math.exp(-land * 6);
+      }
+      letEase[i] = e;
+      letPop[i] = pop;
+    }
+
     final target = progress >= 1 ? 1.0 : 0.0;
     flare += (target - flare) * math.min(1.0, dt * 5);
 
@@ -461,10 +522,14 @@ double _smooth(double x) {
 }
 
 // ================================================================= the painter
-class _DragonPainter extends CustomPainter {
+class _NameDragonPainter extends CustomPainter {
   final _Scene s;
   final Color color;
   final double scaleMul;
+  final double nameMul;
+  final double? nameY;
+  final double? dragonY;
+  final String tagline;
 
   double fade = 1;
   final Paint _s = Paint()
@@ -473,8 +538,77 @@ class _DragonPainter extends CustomPainter {
     ..strokeJoin = StrokeJoin.round;
   final Paint _f = Paint()..style = PaintingStyle.fill;
 
-  _DragonPainter(this.s, this.color, this.scaleMul, Listenable repaint)
-      : super(repaint: repaint);
+  late final List<TextPainter> _outline;
+  late final List<TextPainter> _fill;
+  late final List<TextPainter> _glow;
+  late final TextPainter _tag;
+
+  static const double _adv = 66.0; // width of one letter slot (name units)
+
+  _NameDragonPainter(
+    this.s,
+    this.color,
+    this.scaleMul,
+    this.nameMul,
+    this.nameY,
+    this.dragonY,
+    this.tagline,
+    Listenable repaint,
+  ) : super(repaint: repaint) {
+    TextStyle style({Paint? fg, Color? c, FontWeight w = FontWeight.w300}) =>
+        TextStyle(
+          fontFamily: 'monospace',
+          fontFamilyFallback: _kMonoFallback,
+          fontSize: 100,
+          height: 1,
+          letterSpacing: 6,
+          fontWeight: w,
+          decoration: TextDecoration.none,
+          color: fg == null ? c : null,
+          foreground: fg,
+        );
+
+    TextPainter mk(String ch, TextStyle st) => TextPainter(
+          text: TextSpan(text: ch, style: st),
+          textDirection: TextDirection.ltr,
+        )..layout();
+
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..color = color;
+    final blur = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+
+    _outline = [
+      for (int i = 0; i < _Scene.nameN; i++)
+        mk(_Scene.letters[i], style(fg: stroke, w: FontWeight.w200)),
+    ];
+    _fill = [
+      for (int i = 0; i < _Scene.nameN; i++)
+        mk(_Scene.letters[i], style(c: color, w: FontWeight.w300)),
+    ];
+    _glow = [
+      for (int i = 0; i < _Scene.nameN; i++)
+        mk(_Scene.letters[i], style(fg: blur, w: FontWeight.w400)),
+    ];
+    _tag = TextPainter(
+      text: TextSpan(
+        text: tagline,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontFamilyFallback: _kMonoFallback,
+          fontSize: 18,
+          letterSpacing: 10,
+          decoration: TextDecoration.none,
+          color: color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+  }
 
   Color col(double a) =>
       color.withAlpha((a.clamp(0.0, 1.0).toDouble() * fade * 255).round());
@@ -510,12 +644,19 @@ class _DragonPainter extends CustomPainter {
     final portrait = h > w * 1.15;
     final longSide = portrait ? h : w;
     final shortSide = portrait ? w : h;
-    final k = math.min(longSide * 0.84 / 650, shortSide * 0.92 / 430) * scaleMul;
+    // the dragon lives in the lower part of the screen, below the name
+    final fit = portrait ? 0.62 : 0.56;
+    final k = math.min(longSide * 0.84 / 650, shortSide * 0.92 / 430) *
+        fit *
+        scaleMul;
+    final dragonCy = h * (dragonY ?? (portrait ? 0.64 : 0.68));
 
     _drawDust(canvas, size);
+    _drawRing(canvas, size);
+    _drawName(canvas, size, portrait);
 
     canvas.save();
-    canvas.translate(w / 2, h / 2);
+    canvas.translate(w / 2, dragonCy);
     if (portrait) canvas.rotate(-math.pi / 2); // dragon stands up on phones
     canvas.scale(k);
 
@@ -539,6 +680,7 @@ class _DragonPainter extends CustomPainter {
     canvas.restore();
 
     _drawHairline(canvas, size);
+    _drawBrackets(canvas, size);
 
     // white flash while the dragon flies through
     if (s.exit > 0) {
@@ -548,6 +690,157 @@ class _DragonPainter extends CustomPainter {
           .withAlpha((fl.clamp(0.0, 1.0).toDouble() * 0.9 * 255).round());
       canvas.drawRect(Offset.zero & size, _f);
     }
+  }
+
+  // ------------------------------------------------------------- the name
+  Offset _slot(int j, bool portrait) {
+    if (portrait) {
+      // two lines: AMAL / MATHEW
+      if (j < 4) return Offset((j - 1.5) * _adv, -62);
+      return Offset((j - 4 - 2.5) * _adv, 62);
+    }
+    // one line: AMAL_MATHEW (the space takes one slot)
+    if (j < 4) return Offset((j - 5) * _adv, 0);
+    return Offset((j - 4) * _adv, 0);
+  }
+
+  void _drawName(Canvas canvas, Size size, bool portrait) {
+    final w = size.width;
+    final h = size.height;
+    final double k = portrait
+        ? math.min(w * 0.86 / (6 * _adv), h * 0.2 / 224) * nameMul
+        : math.min(w * 0.88 / (11 * _adv), h * 0.2 / 100) * nameMul;
+    final nameCy = h * (nameY ?? (portrait ? 0.2 : 0.27));
+
+    canvas.save();
+    canvas.translate(w / 2, nameCy);
+    if (s.exit > 0) {
+      final zs = 1 + s.exit * s.exit * 2.5;
+      canvas.scale(zs);
+    }
+    canvas.scale(k);
+
+    for (int j = 0; j < _Scene.nameN; j++) {
+      final e = s.letEase[j];
+      if (e <= 0.01) continue;
+      final pop = s.letPop[j];
+
+      final wave = Offset(
+        0,
+        math.sin(s.time * 1.6 + j * 0.6) * 5 * (1 - s.flare * 0.7),
+      );
+      final p = _slot(j, portrait) + wave + s.letOffs[j] * (1 - e);
+
+      final o = _outline[j];
+      final bounds = Rect.fromLTWH(-50, -50, o.width + 100, o.height + 100);
+
+      canvas.save();
+      canvas.translate(p.dx, p.dy);
+      canvas.rotate((1 - e) * 0.9);
+      canvas.scale((0.6 + 0.4 * e) * (1 + 0.2 * pop));
+      canvas.translate(-o.width / 2, -o.height / 2);
+
+      // soft glow: a travelling pulse once loaded, a flash when it lands
+      final glowA =
+          e * (s.flare * (0.35 + 0.25 * math.sin(s.time * 3 - j * 0.5)) + pop * 0.6);
+      if (glowA > 0.01) {
+        canvas.saveLayer(bounds, Paint()..color = col(glowA));
+        _glow[j].paint(canvas, Offset.zero);
+        canvas.restore();
+      }
+
+      // faint fill after loading
+      if (s.flare > 0.01) {
+        canvas.saveLayer(bounds, Paint()..color = col(e * s.flare * 0.28));
+        _fill[j].paint(canvas, Offset.zero);
+        canvas.restore();
+      }
+
+      // outline
+      final outA = e * (0.5 + 0.5 * s.flare) + pop * 0.4;
+      canvas.saveLayer(bounds, Paint()..color = col(outA));
+      o.paint(canvas, Offset.zero);
+      canvas.restore();
+
+      canvas.restore();
+    }
+    canvas.restore();
+
+    // tagline fades in under the name
+    if (s.flare > 0.01) {
+      final ts = math.min(1.0, w * 0.8 / _tag.width);
+      final y = nameCy + ((portrait ? 62 : 0) + 50 + 26) * k;
+      canvas.save();
+      canvas.translate(w / 2, y);
+      canvas.scale(ts);
+      canvas.translate(-_tag.width / 2, 0);
+      canvas.saveLayer(
+        Rect.fromLTWH(-20, -20, _tag.width + 40, _tag.height + 40),
+        Paint()..color = col(0.85 * s.flare),
+      );
+      _tag.paint(canvas, Offset.zero);
+      canvas.restore();
+      canvas.restore();
+    }
+  }
+
+  // -------------------------------------------- circular progress + frame
+  void _drawRing(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = math.min(size.width, size.height) * 0.44;
+    const ticks = 120;
+    final zoom = 1 + s.exit * s.exit * 2.0;
+
+    for (int i = 0; i < ticks; i++) {
+      final u = i / ticks;
+      final a = -math.pi / 2 + u * math.pi * 2;
+      final long = i % 10 == 0;
+      final lit = u <= s.progress;
+      final r0 = r * zoom;
+      final r1 = (r + (long ? 11 : 5)) * zoom;
+      final dir = Offset(math.cos(a), math.sin(a));
+      _line(
+        canvas,
+        c + dir * r0,
+        c + dir * r1,
+        long ? 1.4 : 1.0,
+        lit ? (long ? 0.75 : 0.45) : 0.10,
+      );
+    }
+
+    // a little satellite that orbits the ring
+    final oa = s.time * 0.8;
+    final op = c + Offset(math.cos(oa), math.sin(oa)) * (r - 14) * zoom;
+    _dot(canvas, op, 2.2, 0.7);
+    _ring(canvas, op, 5, 0.8, 0.25);
+  }
+
+  void _drawBrackets(Canvas canvas, Size size) {
+    const inset = 14.0;
+    const len = 20.0;
+    final w = size.width;
+    final h = size.height;
+    const a = 0.5;
+    // top-left
+    _line(canvas, const Offset(inset, inset),
+        const Offset(inset + len, inset), 1.2, a);
+    _line(canvas, const Offset(inset, inset),
+        const Offset(inset, inset + len), 1.2, a);
+    // top-right
+    _line(canvas, Offset(w - inset, inset), Offset(w - inset - len, inset),
+        1.2, a);
+    _line(canvas, Offset(w - inset, inset), Offset(w - inset, inset + len),
+        1.2, a);
+    // bottom-left
+    _line(canvas, Offset(inset, h - inset), Offset(inset + len, h - inset),
+        1.2, a);
+    _line(canvas, Offset(inset, h - inset), Offset(inset, h - inset - len),
+        1.2, a);
+    // bottom-right
+    _line(canvas, Offset(w - inset, h - inset),
+        Offset(w - inset - len, h - inset), 1.2, a);
+    _line(canvas, Offset(w - inset, h - inset),
+        Offset(w - inset, h - inset - len), 1.2, a);
   }
 
   void _drawDust(Canvas canvas, Size size) {
@@ -565,7 +858,7 @@ class _DragonPainter extends CustomPainter {
   void _drawHairline(Canvas canvas, Size size) {
     const pad = 28.0;
     final y = size.height - 24;
-    const x0 = pad;
+    final x0 = pad;
     final x1 = size.width - pad;
 
     _line(canvas, Offset(x0, y), Offset(x1, y), 1, 0.16);
@@ -825,5 +1118,5 @@ class _DragonPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DragonPainter old) => false;
+  bool shouldRepaint(covariant _NameDragonPainter old) => false;
 }
