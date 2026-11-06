@@ -1,13 +1,8 @@
 
-name: Deploy Flutter Portfolio to GitHub Pages
+name: Deploy Main and Dev Flutter Portfolios
 
 on:
   push:
-    branches:
-      - main
-      - dev
-
-  pull_request:
     branches:
       - main
       - dev
@@ -25,43 +20,67 @@ concurrency:
 
 jobs:
   build:
-    name: Build Flutter Web
+    name: Build Main and Dev Websites
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout Repository
+      # Checkout both branches
+      - name: Checkout Main
         uses: actions/checkout@v5
+        with:
+          ref: main
+          path: main-source
 
+      - name: Checkout Dev
+        uses: actions/checkout@v5
+        with:
+          ref: dev
+          path: dev-source
+
+      # Install Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build Flutter Web
+      # Build Main Portfolio
+      - name: Build Main
         run: |
-          flutter build web \
-            --release \
-            --base-href "/${{ github.event.repository.name }}/"
+          cd main-source
+          flutter pub get
+          flutter build web --release \
+            --base-href "/portfolio/"
 
-      - name: Configure SPA Routing
-        run: cp build/web/index.html build/web/404.html
+      # Build Dev Portfolio
+      - name: Build Dev
+        run: |
+          cd dev-source
+          flutter pub get
+          flutter build web --release \
+            --base-href "/portfolio/dev/"
 
-      - name: Upload GitHub Pages Artifact
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      # Combine both websites
+      - name: Combine Websites
+        run: |
+          mkdir -p site
+          mkdir -p site/dev
+
+          cp -r main-source/build/web/. site/
+          cp -r dev-source/build/web/. site/dev/
+
+          cp site/index.html site/404.html
+          cp site/dev/index.html site/dev/404.html
+
+      # Upload combined website
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: build/web
+          path: site
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy Both Websites
     needs: build
-
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-
     runs-on: ubuntu-24.04
 
     environment:
