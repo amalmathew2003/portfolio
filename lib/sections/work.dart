@@ -171,7 +171,7 @@ class _WorkSectionState extends State<WorkSection> {
 enum _CardLayout { wideHero, half }
 
 // ─── Project card ─────────────────────────────────────────────────────────────
-class _ProjectCard extends StatelessWidget {
+class _ProjectCard extends StatefulWidget {
   const _ProjectCard({
     super.key,
     required this.project,
@@ -183,44 +183,84 @@ class _ProjectCard extends StatelessWidget {
   final _CardLayout layout;
   final bool stretch;
 
-  bool get _isHero => layout == _CardLayout.wideHero;
+  @override
+  State<_ProjectCard> createState() => _ProjectCardState();
+}
+
+class _ProjectCardState extends State<_ProjectCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _t;
+  bool _h = false;
+
+  bool get _isHero => widget.layout == _CardLayout.wideHero;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    _t = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _enter(_) {
+    if (mounted) setState(() => _h = true);
+    app.cursorMode.value = CursorMode.view;
+    _ctrl.forward();
+  }
+
+  void _exit(_) {
+    if (mounted) setState(() => _h = false);
+    app.cursorMode.value = CursorMode.normal;
+    _ctrl.reverse();
+  }
 
   @override
   Widget build(BuildContext context) {
     final md = Bp.md(context);
 
-    return Hov(
-      cursor: CursorMode.view,
-      builder: (context, h) {
-        return TweenAnimationBuilder<double>(
-          tween: Tween<double>(end: h ? 1.0 : 0.0),
-          duration: const Duration(milliseconds: 450),
+    return MouseRegion(
+      onEnter: _enter,
+      onExit: _exit,
+      child: AnimatedBuilder(
+        animation: _t,
+        builder: (context, child) {
+          final t = _t.value;
+          final m = Matrix4.identity()
+            ..setEntry(3, 2, 0.0008)
+            ..rotateX(0.012 * t)
+            ..rotateY(-0.012 * t);
+          return Transform(
+            alignment: Alignment.center,
+            transform: m,
+            child: child,
+          );
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
           curve: Curves.easeOut,
-          builder: (context, t, child) {
-            final m = Matrix4.identity()
-              ..setEntry(3, 2, 0.0008)
-              ..rotateX(0.012 * t)
-              ..rotateY(-0.012 * t);
-            return Transform(alignment: Alignment.center, transform: m, child: child);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOut,
-            clipBehavior: Clip.hardEdge,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0C0C0C),
-              border: Border.all(
-                color: h ? op(C.accent, 0.45) : wh(0.08),
-                width: h ? 1.5 : 1,
-              ),
+          clipBehavior: Clip.hardEdge,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0C0C0C),
+            border: Border.all(
+              color: _h ? op(C.accent, 0.45) : wh(0.08),
+              width: _h ? 1.5 : 1,
             ),
-            child: _isHero && md
-                ? _wideLayout(context, h, md)
-                : _stackLayout(context, h, md),
           ),
-        );
-      },
+          child: _isHero && md
+              ? _wideLayout(context, _h, md)
+              : _stackLayout(context, _h, md),
+        ),
+      ),
     );
   }
 
@@ -240,7 +280,7 @@ class _ProjectCard extends StatelessWidget {
 
   // Stacked: preview on top | content below
   Widget _stackLayout(BuildContext context, bool h, bool md) {
-    if (stretch) {
+    if (widget.stretch) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -260,7 +300,7 @@ class _ProjectCard extends StatelessWidget {
   }
 
   Widget _preview(bool h, bool md, {required bool isWide}) {
-    final p = project;
+    final p = widget.project;
     final previewH = isWide ? 460.0 : (_isHero ? 360.0 : (md ? 280.0 : 250.0));
 
     return Container(
@@ -342,7 +382,7 @@ class _ProjectCard extends StatelessWidget {
   }
 
   Widget _content(bool h, bool md, {required bool stretch}) {
-    final p = project;
+    final p = widget.project;
     return Padding(
       padding: EdgeInsets.all(md ? 32 : 24),
       child: Column(
