@@ -37355,7 +37355,7 @@ for(s=0;s<6;++s)k.push(new A.HX(B.Fd[s],s,q))
 r=A.aw(q,A.an(k,B.a9,B.j,B.o),B.k,q,q,new A.ad(q,q,new A.bc(new A.bs(l,1,B.F,-1),B.n,B.n,B.n),q,q,q,B.t),q,q,q,q,q,q,q,q)
 return A.pg(B.cH,B.bm,A.aw(q,p.a.a>=1024?A.D0(B.x,12,64,A.c([new A.dX(5,new A.wz(128,o,m,q)),new A.dX(7,r)],t.mk),!1,q):A.an(A.c([m,B.MP,r],n),B.x,B.j,B.o),B.k,q,q,q,q,q,o,q,q,q,q,q))}}
 A.Ql.prototype={
-$0(){return A.jP(A.dO("https://drive.google.com/uc?export=download&id=1vg50mxVox4a6OyzBaDB-Mz06LCYULs3W",0,null),B.c4)},
+$0(){return A.jP(A.dO("https://drive.usercontent.google.com/download?id=1vg50mxVox4a6OyzBaDB-Mz06LCYULs3W&export=download",0,null),B.c4)},
 $S:0}
 A.Qk.prototype={
 $2(a,b){var s=null,r=b?A.af(B.l,0.1):B.ad,q=A.bT(b?B.l:A.af(B.d,0.08),1),p=A.a5("[ VERIFIED CREDENTIALS ]",s,s,s,A.aC(10,!1,B.l,0.1),s),o=t.p
