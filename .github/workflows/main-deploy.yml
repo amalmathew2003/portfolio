@@ -1,0 +1,50 @@
+
+name: Flutter Web CI/CD (MAIN)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Prevent simultaneous updates to the port branch
+concurrency:
+  group: pages-port-deployment
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Main
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+
+      - name: Enable Flutter Web
+        run: flutter config --enable-web
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Main Portfolio
+        run: |
+          flutter build web \
+            --release \
+            --base-href "/${{ github.event.repository.name }}/"
+
+      - name: Deploy Main to Port Branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: port
+          publish_dir: build/web
+          keep_files: true
