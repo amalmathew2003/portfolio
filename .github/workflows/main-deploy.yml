@@ -1,26 +1,26 @@
 
-name: Flutter Web CI/CD (DEV)
+name: Flutter Web CI/CD (MAIN)
 
 on:
   push:
     branches:
-      - dev
+      - main
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# Use the same concurrency group as MAIN
+# Prevent simultaneous updates to the port branch
 concurrency:
   group: pages-port-deployment
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy-dev:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Dev
+      - name: Checkout Main
         uses: actions/checkout@v4
 
       - name: Setup Flutter
@@ -35,16 +35,16 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build Flutter Web (DEV)
+      - name: Build Main Portfolio
         run: |
           flutter build web \
             --release \
-            --base-href "/${{ github.event.repository.name }}/dev/"
+            --base-href "/${{ github.event.repository.name }}/"
 
-      - name: Deploy Dev to Port Branch
+      - name: Deploy Main to Port Branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: port
           publish_dir: build/web
-          destination_dir: dev
+          keep_files: true

@@ -48,3 +48,4 @@ jobs:
           publish_branch: port
           publish_dir: build/web
           destination_dir: dev
+          keep_files: true
