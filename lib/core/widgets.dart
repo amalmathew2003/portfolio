@@ -664,12 +664,11 @@ class _StickyState extends State<Sticky> {
       child: KeyedSubtree(key: _childKey, child: widget.child),
       builder: (context, child) {
         final dy = _dy();
-        // Skip transform if position hasn't changed (avoids compositing layer dirty)
         if ((dy - _last).abs() < 0.5) {
-          return Transform.translate(offset: Offset(0, _last), child: child);
+          return Padding(padding: EdgeInsets.only(top: _last), child: child);
         }
         _last = dy;
-        return Transform.translate(offset: Offset(0, dy), child: child);
+        return Padding(padding: EdgeInsets.only(top: dy), child: child);
       },
     );
   }

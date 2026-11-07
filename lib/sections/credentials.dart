@@ -49,10 +49,20 @@ class CredentialsSection extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 384),
           child: Hov(
             cursor: CursorMode.hover,
-            onTap: () => launchUrl(
-              Uri.parse(SocialLinks.cvDownloadUrl),
-              mode: LaunchMode.externalApplication,
-            ),
+            onTap: () async {
+              final uri = Uri.parse(SocialLinks.cvDownloadUrl);
+              try {
+                final launched = await launchUrl(
+                  uri,
+                  mode: LaunchMode.externalApplication,
+                );
+                if (!launched) {
+                  await launchUrl(uri);
+                }
+              } catch (_) {
+                await launchUrl(uri);
+              }
+            },
             builder: (context, h) => AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
@@ -114,6 +124,7 @@ class CredentialsSection extends StatelessWidget {
             ? Grid(
                 columns: 12,
                 gap: 64,
+                stretch: true,
                 items: [
                   GridItem(5, Sticky(top: 128, areaKey: areaKey, child: left)),
                   GridItem(7, right),
