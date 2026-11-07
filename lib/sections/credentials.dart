@@ -53,11 +53,25 @@ class CredentialsSection extends StatelessWidget {
               Uri.parse(SocialLinks.cvDownloadUrl),
               mode: LaunchMode.externalApplication,
             ),
-            builder: (context, h) => Container(
+            builder: (context, h) => AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: h ? op(C.accent, 0.1) : C.bg,
-                border: Border.all(color: h ? C.accent : wh(0.08)),
+                color: h ? op(C.accent, 0.12) : C.bg,
+                border: Border.all(
+                  color: h ? C.accent : wh(0.08),
+                  width: h ? 1.5 : 1.0,
+                ),
+                boxShadow: [
+                  if (h)
+                    BoxShadow(
+                      color: op(C.accent, 0.35),
+                      blurRadius: 28,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 4),
+                    ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

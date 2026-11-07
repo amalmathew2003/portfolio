@@ -361,23 +361,35 @@ class _HovState extends State<Hov> {
     final sys = widget.sysCursor != MouseCursor.defer
         ? widget.sysCursor
         : (widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer);
-    Widget w = MouseRegion(
+
+    Widget content = widget.builder(context, _h);
+    if (widget.onTap != null) {
+      content = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: content,
+      );
+    }
+
+    return MouseRegion(
       cursor: sys,
       opaque: widget.opaque,
       onEnter: (_) {
-        setState(() => _h = true);
+        if (!_h && mounted) setState(() => _h = true);
         if (widget.cursor != null) app.cursorMode.value = widget.cursor!;
       },
+      onHover: (_) {
+        if (!_h && mounted) {
+          setState(() => _h = true);
+          if (widget.cursor != null) app.cursorMode.value = widget.cursor!;
+        }
+      },
       onExit: (_) {
-        if (mounted) setState(() => _h = false);
+        if (_h && mounted) setState(() => _h = false);
         if (widget.cursor != null) app.cursorMode.value = CursorMode.normal;
       },
-      child: widget.builder(context, _h),
+      child: content,
     );
-    if (widget.onTap != null) {
-      w = GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, child: w);
-    }
-    return w;
   }
 }
 

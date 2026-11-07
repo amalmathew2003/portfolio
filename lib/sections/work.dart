@@ -212,9 +212,17 @@ class _ProjectCardState extends State<_ProjectCard>
   }
 
   void _enter(_) {
-    if (mounted) setState(() => _h = true);
+    if (!_h && mounted) setState(() => _h = true);
     app.cursorMode.value = CursorMode.view;
     _ctrl.forward();
+  }
+
+  void _hover(_) {
+    if (!_h && mounted) {
+      setState(() => _h = true);
+      app.cursorMode.value = CursorMode.view;
+      _ctrl.forward();
+    }
   }
 
   void _exit(_) {
@@ -229,6 +237,7 @@ class _ProjectCardState extends State<_ProjectCard>
 
     return MouseRegion(
       onEnter: _enter,
+      onHover: _hover,
       onExit: _exit,
       child: AnimatedBuilder(
         animation: _t,
@@ -252,9 +261,18 @@ class _ProjectCardState extends State<_ProjectCard>
           decoration: BoxDecoration(
             color: const Color(0xFF0C0C0C),
             border: Border.all(
-              color: _h ? op(C.accent, 0.45) : wh(0.08),
+              color: _h ? op(C.accent, 0.6) : wh(0.08),
               width: _h ? 1.5 : 1,
             ),
+            boxShadow: [
+              if (_h)
+                BoxShadow(
+                  color: op(C.accent, 0.25),
+                  blurRadius: 36,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 10),
+                ),
+            ],
           ),
           child: _isHero && md
               ? _wideLayout(context, _h, md)
