@@ -8,6 +8,9 @@ enum CursorMode { normal, hover, view, drag }
 class AppCtrl {
   final ScrollController scroll = ScrollController();
 
+
+  
+
   /// Position of the pointer in window coordinates (like clientX/clientY).
   final ValueNotifier<Offset> pointer = ValueNotifier(const Offset(-100, -100));
   final ValueNotifier<CursorMode> cursorMode = ValueNotifier(CursorMode.normal);
